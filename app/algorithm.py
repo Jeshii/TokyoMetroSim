@@ -1,11 +1,9 @@
 """
-    Finalized algorithm for pathfinding, uses dijkstra's.
+Finalized algorithm for pathfinding, uses dijkstra's.
 """
-
 
 # ----------------- imports ----------------- #
 import json
-
 
 # ----------------- algorithm ----------------- #
 """
@@ -76,18 +74,18 @@ def path_find(graph, start, end):
             )
             count += 1
 
-    path_string += "Total distance traveled: " + str(round(distance, 1)) + " km.\n"
+    path_string += "Total distance traveled: " + str(round(distance, 1)) + " km\n"
     done = False
     for i in range(len(path) - 1):
         if i == 0:
-            path_string += "Board at " + secondary[path[i]] + " Station. "
+            path_string += "Board at " + secondary[path[i]] + " Station\n"
         if i == len(path) - 2:
             path_string += (
                 "Ride on the "
                 + letter_to_line[path[i][0]]
                 + " line until "
                 + secondary[path[i + 1]]
-                + " Station. "
+                + " Station\n"
             )
             done = True
         if path[i + 1][0] == path[i][0]:
@@ -98,7 +96,7 @@ def path_find(graph, start, end):
                 + letter_to_line[path[i][0]]
                 + " line until "
                 + secondary[path[i + 1]]
-                + " Station. "
+                + " Station\n"
             )
 
     # returns #

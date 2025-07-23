@@ -1,4 +1,2 @@
-flask==2.3.2
-pywebio==1.8.2
 networkx==3.1
 matplotlib==3.7.1
