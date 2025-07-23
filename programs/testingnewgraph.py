@@ -1,9 +1,9 @@
 # ----------- libraries import ----------- #
-import networkx as nx
-import matplotlib.pyplot as plt
 import json
-from dijkstras import *
 
+import dijkstras
+import matplotlib.pyplot as plt
+import networkx as nx
 
 # ----------- load files ----------- #
 with open("../datasets/clean_stations.json") as f:
@@ -31,7 +31,7 @@ for node, neighbors in data.items():
 # ----------- find path ----------- #
 # get path #
 # path = ["A01", "A02", "A03"]
-path = dijkstra(graph, "A01", "S19")[1]
+path = dijkstras.dijkstra(graph, "A01", "S19")[1]
 
 
 # convert to station names #
@@ -133,9 +133,9 @@ if path[len(path) - 1] not in hold:
 print(hold)
 node_label_dict = {}
 for i in hold:
-    node_label_dict[i] = secondary[i]
+    node_label_dict[i] = dijkstras.secondary[i]
 print(node_label_dict)
-nx.set_node_attributes(graph, node_label_dict, 'label')
+nx.set_node_attributes(graph, node_label_dict, "label")
 
 # draw graph #
 nx.draw_networkx(
@@ -148,19 +148,5 @@ nx.draw_networkx(
     with_labels=True,
     font_size=8,
 )
-
-# show metro map #
-# edge_colors = nx.get_edge_attributes(graph, 'color').values()
-# node_colors = nx.get_node_attributes(graph, 'color').values()
-
-# nx.draw_networkx(
-#     graph,
-#     pos=pos,
-#     node_size=50,
-#     # width=widths,
-#     node_color=node_colors,
-#     edge_color=edge_colors,
-#     with_labels=True
-# )
 
 plt.show()

@@ -12,19 +12,19 @@ with open(FILE_PATH, "r") as file:
     secondary = json.load(file)
 tertiary = dict((v, k) for k, v in secondary.items())
 letter_to_line = {
-    "A": "Rose",
-    "I": "Blue",
-    "S": "Leaf",
-    "E": "Magenta",
-    "G": "Orange",
-    "M": "Red",
-    "H": "Silver",
-    "T": "Sky",
-    "C": "Green",
-    "Y": "Gold",
-    "Z": "Purple",
-    "N": "Emerald",
-    "F": "Brown",
+    "A": "Asakusa",
+    "I": "Mita",
+    "S": "Shinjuku",
+    "E": "Oedo",
+    "G": "Ginza",
+    "M": "Marunouchi",
+    "H": "Hibiya",
+    "T": "Tozai",
+    "C": "Chiyoda",
+    "Y": "Yurakucho",
+    "Z": "Hanzomon",
+    "N": "Namboku",
+    "F": "Fukutoshin",
 }
 
 

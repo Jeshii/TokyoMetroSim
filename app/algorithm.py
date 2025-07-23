@@ -25,19 +25,19 @@ def path_find(graph, start, end):
     # get path string #
     # setup
     letter_to_line = {
-        "A": "Rose",
-        "I": "Blue",
-        "S": "Leaf",
-        "E": "Magenta",
-        "G": "Orange",
-        "M": "Red",
-        "H": "Silver",
-        "T": "Sky",
-        "C": "Green",
-        "Y": "Gold",
-        "Z": "Purple",
-        "N": "Emerald",
-        "F": "Brown",
+        "A": "Asakusa",
+        "I": "Mita",
+        "S": "Shinjuku",
+        "E": "Oedo",
+        "G": "Ginza",
+        "M": "Marunouchi",
+        "H": "Hibiya",
+        "T": "Tozai",
+        "C": "Chiyoda",
+        "Y": "Yurakucho",
+        "Z": "Hanzomon",
+        "N": "Namboku",
+        "F": "Fukutoshin",
     }
     with open("../datasets/secondary.json", "r") as f:
         secondary = json.load(f)

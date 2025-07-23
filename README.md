@@ -23,8 +23,8 @@ The front-end interface of the project is built using PyWebIO, a user-friendly l
 
 ## Dependencies
 
-Please install python if not installed already. Open your terminal and navigate to the directory in which this repository is cloned. Then run "pip install -r requirements.txt" in your terminal. This will install all the required dependencies to run the program.
+Please install python and pipenv if not installed already. Open your terminal and navigate to the directory in which this repository is cloned. Then run "pipenv install"
 
 ## How to Run
 
-Open your terminal and navigate to the directory in which this repository is cloned. Type "python web_app.py" into your terminal and click enter. A tab should open in your browser with the metro app.
+Open your terminal and run python3 programs/app.py
