@@ -41,11 +41,17 @@ for node, neighbors in data.items():
             secondary[node] == secondary[neighbor] and node[0] != neighbor[0]
         ) or weight <= 0:
             graph.add_edge(
-                node, neighbor, weight=2.0, color=color_maps["BASE"]
-            )  # Set transfer edge with default weight
+                node,
+                neighbor,
+                weight=2.0,  # Algorithm weight (expensive to discourage zig-zagging)
+                real_distance=weight,
+                color=color_maps["BASE"],
+            )
         else:
             edge_color = color_maps.get(line_code, color_maps["BASE"])
-            graph.add_edge(node, neighbor, weight=weight, color=edge_color)
+            graph.add_edge(
+                node, neighbor, weight=weight, real_distance=weight, color=edge_color
+            )
 
 nx.write_graphml(graph, "datasets/tokyometro.graphml")
 

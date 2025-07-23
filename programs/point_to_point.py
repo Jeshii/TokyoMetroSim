@@ -40,17 +40,25 @@ def get_route(start: str, end: str, verbose: bool = False) -> str:
     :return: Formatted string of the route.
     """
     dji = dijkstra(graph, tertiary[start], tertiary[end])
+    total_real_distance = 0.0
 
     if verbose:
         print("Raw path from dijkstra:")
-        for idx in range(len(dji[1]) - 1):
-            node = dji[1][idx]
-            next_node = dji[1][idx + 1]
-            line = letter_to_line.get(node[0], "Unknown")
-            station = secondary.get(node, "Unknown")
-            edge_weight = graph.get_edge_data(node, next_node)["weight"]
+
+    for idx in range(len(dji[1]) - 1):
+        node = dji[1][idx]
+        next_node = dji[1][idx + 1]
+        edge = graph.get_edge_data(node, next_node)
+        line = letter_to_line.get(node[0], "Unknown")
+        station = secondary.get(node, "Unknown")
+        edge_weight = graph.get_edge_data(node, next_node)["weight"]
+        real_dist = edge.get(
+            "real_distance", edge["weight"]
+        )  # fallback to weight if not set
+        total_real_distance += real_dist
+        if verbose:
             print(
-                f"  {node} -> {next_node}: {station} ({line} line), weight={edge_weight}"
+                f"  {node} -> {next_node}: {station} ({line} line), weight={edge_weight}, real_distance={real_dist}"
             )
 
     output = ""
@@ -84,7 +92,11 @@ def get_route(start: str, end: str, verbose: bool = False) -> str:
                 + " Station\n"
             )
     output += "Arrive at " + secondary[dji[1][-1]] + " Station\n"
-    output += "Total distance traveled: " + str(round(dji[0], 2)) + " km\n"
+
+    output += "Total distance traveled: " + str(round(total_real_distance, 2)) + " km\n"
+
+    if verbose:
+        output += "Weighted distance: " + str(round(dji[0], 2)) + " km\n"
 
     return output
 
