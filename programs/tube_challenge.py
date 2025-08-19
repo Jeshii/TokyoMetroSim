@@ -196,8 +196,7 @@ def add_custom_connections(graph):
     graph.add_edge("H16", "H18", real_distance=1.0, weight=2.0, color="JR")
     # Yamanote Line between Ueno and Nishi-Nippori - one transfer plus 1 stops
     graph.add_edge("H18", "C16", real_distance=1.0, weight=2.0, color="JR")
-    # Yamanote Line between Nishi-Nippori and Komagome - one transfer plus 1 stops
-    graph.add_edge("C16", "N14", real_distance=1.0, weight=2.0, color="JR")
+
     # Yamanote Line between Komagome and Sugamo - one transfer plus 1 stops
     graph.add_edge("N14", "I15", real_distance=1.0, weight=2.0, color="JR")
     # Yamanote Line between Sugamo and Ikebukuro - one transfer plus 1 stops
