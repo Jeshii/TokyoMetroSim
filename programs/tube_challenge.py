@@ -928,16 +928,6 @@ def main(args):
             else:
                 candidate_start_dt = cutoff_dt
 
-        # Mutate candidate route for trial > 0 to escape identical TSP solutions
-        if t > 0 and len(candidate_route) > 4:
-            # Perform a small number of random station swaps (not 2-opt reversals)
-            num_swaps = max(2, len(candidate_route) // 20)
-            for _ in range(num_swaps):
-                a = trial_rng.randint(1, len(candidate_route) - 2)
-                b = trial_rng.randint(1, len(candidate_route) - 2)
-                if a != b and candidate_route[a] is not None and candidate_route[b] is not None:
-                    candidate_route[a], candidate_route[b] = candidate_route[b], candidate_route[a]
-
         # refine with two-opt (validated against timed objective)
         if not no_two_opt:
             try:
