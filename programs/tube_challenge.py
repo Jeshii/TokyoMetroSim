@@ -46,8 +46,25 @@ LINE_COLORS = {
     "Rinkai": "#2E3B7E",
     "Bus": "#FF00F7",
     "Seibu": "#40A5AF",
+    "Transfer": "#00FFFF",
     "Unknown": "#cccccc",
 }
+
+# World record stored as a timedelta (single source of truth)
+WORLD_RECORD_DELTA = timedelta(hours=13, minutes=53, seconds=25)
+# Derived minutes for comparisons (used as default threshold)
+WORLD_RECORD_MINUTES = int(WORLD_RECORD_DELTA.total_seconds() / 60)
+
+
+def format_timedelta_hms(td: timedelta) -> str:
+    """Format a timedelta as 'Hh Mm Ss' (omit seconds if zero)."""
+    total_seconds = int(td.total_seconds())
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    if seconds:
+        return f"{hours}h {minutes}m {seconds}s"
+    return f"{hours}h {minutes}m"
 
 
 def get_board_departure_time(leg_idx, edge_lines, trip_ids, depart_times, arrival_times):
@@ -257,7 +274,7 @@ def add_custom_connections(graph, disable_bus=False):
 
     # Bus between Narimasu and Hikarigaoka - one transfer plus 9 stops
     if not disable_bus:
-        graph.add_edge("Y02", "E38", real_distance=2.4, weight=4.4, color="Bus")
+        graph.add_edge("Y02", "E38", real_distance=2.4, weight=22.0, color="Bus")
 
     # Yamanote Junctions (needs double checking)
 
@@ -287,6 +304,22 @@ def add_custom_connections(graph, disable_bus=False):
     graph.add_edge("H16", "H18", real_distance=1.0, weight=2.0, color="jreast-yamanote")
     # Yamanote Line between Ueno and Nishi-Nippori - one transfer plus 1 stops
     graph.add_edge("H18", "C16", real_distance=1.0, weight=2.0, color="jreast-yamanote")
+
+    # Fill missing segments and same-station connectors reported by user
+    # South-arc bridge (Gotanda -> Shinbashi) — several JR stops, approximate
+    graph.add_edge("A05", "A10", real_distance=6.0, weight=10.0, color="jreast-yamanote")
+
+    # Ueno cluster: connect Hibiya Ueno-Hirokoji (H18) to Nippori (C17) and JR Ueno nodes
+    graph.add_edge("H18", "C17", real_distance=1.2, weight=3.0, color="JR")
+    graph.add_edge("G16", "H18", real_distance=0.6, weight=3.0, color="JR")
+    graph.add_edge("N09", "H18", real_distance=0.6, weight=3.0, color="JR")
+
+    # Nishi-Nippori -> Komagome (Tabata area lacking metro connection) bridge
+    graph.add_edge("C16", "N14", real_distance=3.5, weight=7.0, color="jreast-yamanote")
+
+    # Ikebukuro internal same-station links (Marunouchi <-> Yurakucho, Yurakucho <-> Fukutoshin)
+    graph.add_edge("M25", "Y09", real_distance=0.2, weight=3.0, color="Transfer")
+    graph.add_edge("Y09", "F09", real_distance=0.2, weight=3.0, color="Transfer")
 
     # Yamanote Line between Komagome and Sugamo - one transfer plus 1 stops
     graph.add_edge("N14", "I15", real_distance=1.0, weight=2.0, color="jreast-yamanote")
@@ -828,6 +861,34 @@ def main(args):
     two_opt_iters = int(getattr(args, "two_opt_iters", 200))
     no_two_opt = getattr(args, "no_two_opt", False)
 
+    # Endless-mode options
+    endless_mode = getattr(args, "endless", False)
+    endless_threshold_str = getattr(args, "endless_threshold", None)
+    if endless_threshold_str:
+        try:
+            if ":" in endless_threshold_str:
+                h, m = map(int, endless_threshold_str.split(":"))
+                endless_threshold_minutes = h * 60 + m
+            else:
+                endless_threshold_minutes = int(endless_threshold_str)
+        except Exception:
+            endless_threshold_minutes = WORLD_RECORD_MINUTES
+    else:
+        endless_threshold_minutes = WORLD_RECORD_MINUTES
+    max_endless_trials = int(getattr(args, "max_endless_trials", 100000))
+
+    if replay_seed is not None and endless_mode:
+        print("Warning: --replay-trial-seed is incompatible with --endless; ignoring --endless.")
+        endless_mode = False
+
+    if endless_mode and forced_start_node:
+        print("Endless mode: ignoring --start-station; choosing random start per trial.")
+        forced_start_node = None
+
+    # If endless mode requested, override `trials` with a large capped value
+    if endless_mode:
+        trials = max_endless_trials
+
     candidates = []
     for t in range(trials):
         # deterministic trial RNG — use replay seed if provided for exact reproduction
@@ -886,26 +947,50 @@ def main(args):
             refined_timed = compute_timed_route(candidate_route, graph, secondary, timetables, candidate_start_dt)
 
         total_min = total_minutes_from_timed(refined_timed)
+
+        # Per-trial one-line summary when running in endless mode
+        if endless_mode:
+            trial_start_node = candidate_route[0] if candidate_route else None
+            trial_start_name = secondary.get(trial_start_node, trial_start_node) if trial_start_node else 'N/A'
+            if total_min is None:
+                time_str = 'N/A'
+            else:
+                th = total_min // 60
+                tm = total_min % 60
+                time_str = f"{th}h {tm}m"
+            print(f"{trial_start_name} ({trial_start_node}) — {time_str} — seed={trial_seed}")
+
         if total_min is None:
             continue
 
-        candidates.append({
+        candidate = {
             "total_min": total_min,
             "route": refined_route,
             "timed": refined_timed,
             "start_dt": candidate_start_dt,
             "trial_seed": trial_seed,
             "noise": noise,
-        })
+        }
+        candidates.append(candidate)
+
+        # If in endless mode and threshold reached, stop early and use this candidate
+        if endless_mode and total_min <= endless_threshold_minutes:
+            success_candidate = candidate
+            print(f"Endless mode: found candidate <= threshold ({time_str}) at trial seed {trial_seed}")
+            break
 
     if not candidates:
         print("No viable timed candidate found.")
         return
 
-    # sort and keep top-k best by timed total
-    candidates.sort(key=lambda c: c["total_min"])  # ascending
-    top_candidates = candidates[:top_k]
-    best_candidate = top_candidates[0]
+    # if an endless-mode success candidate was found, prefer it (print full tour)
+    if 'success_candidate' in locals() and success_candidate is not None:
+        best_candidate = success_candidate
+    else:
+        # sort and keep top-k best by timed total
+        candidates.sort(key=lambda c: c["total_min"])  # ascending
+        top_candidates = candidates[:top_k]
+        best_candidate = top_candidates[0]
 
     # adopt best candidate
     route_reps = best_candidate["route"]
@@ -1130,7 +1215,7 @@ def main(args):
         if seed is not None:
             print(f"Master Seed: {seed}")
         print(f"To reproduce this run exactly: python programs/tube_challenge.py --replay-trial-seed {repro_seed} --trials 1")
-    print("\nWorld Record: 13h 53m 25s")
+    print(f"\nWorld Record: {format_timedelta_hms(WORLD_RECORD_DELTA)}")
     
     # Save last route data for external inspection (JSON)
     try:
@@ -1252,6 +1337,26 @@ def parse_args():
         type=int,
         default=None,
         help="Use this trial RNG seed to reproduce a specific trial exactly",
+    )
+    parser.add_argument(
+        "--endless",
+        action="store_true",
+        dest="endless",
+        help="Run trials until a candidate meets the threshold (default world record)",
+    )
+    parser.add_argument(
+        "--endless-threshold",
+        dest="endless_threshold",
+        type=str,
+        default=None,
+        help="Stopping threshold (format 'HH:MM' or minutes). Default is world record",
+    )
+    parser.add_argument(
+        "--max-endless-trials",
+        dest="max_endless_trials",
+        type=int,
+        default=100000,
+        help="Safety cap for endless mode (default 100000)",
     )
     return parser.parse_args()
 
