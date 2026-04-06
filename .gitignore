@@ -1,2 +1,4 @@
 .DS_Store
 app/route.png
+*/__pycache__/*
+datasets/timetables/mini-tokyo-3d/

@@ -1,0 +1,33 @@
+Kita-senju|Chiyoda|Minami-senju|Hibiya|2026-04-06T05:15:00|2026-04-06T05:17:00
+Tsukiji|Hibiya|Iwamotocho|Shinjuku|2026-04-06T05:42:00|2026-04-06T05:45:00
+Bakuro yokoyama|Shinjuku|Higashi-Nihombashi|Asakusa|2026-04-06T06:06:00|2026-04-06T06:08:00
+Higashi-Nihombashi|Asakusa|Hamacho|Shinjuku|2026-04-06T06:10:00|2026-04-06T06:11:00
+Motoyawata|Shinjuku|Nishi-funabashi|Tozai|2026-04-06T06:46:00|2026-04-06T06:48:00
+Monzen-nakacho|Tozai|Kiyosumi|Oedo|2026-04-06T07:22:00|2026-04-06T07:24:00
+Hikarigaoka|Oedo|Chikatetsu-narimasu|Yurakucho|2026-04-06T08:20:54|2026-04-06T08:22:54
+Chikatetsu-narimasu|Yurakucho|Wakoshi|Fukutoshin|2026-04-06T08:27:18|2026-04-06T08:29:18
+Higashi-shinjuku|Fukutoshin|Hagashi-shinjuku|Oedo|2026-04-06T09:09:00|2026-04-06T09:11:00
+Hagashi-shinjuku|Oedo|Shinjuku-sanchome|Fukutoshin|2026-04-06T09:13:00|2026-04-06T09:14:00
+Shibuya|Fukutoshin|Yoyogi-koen|Chiyoda|2026-04-06T09:27:00|2026-04-06T09:28:00
+Kokkai-gijidomae|Chiyoda|Tameike-sanno|Namboku|2026-04-06T09:56:00|2026-04-06T09:58:00
+Ichigaya|Namboku|Akebonobashi|Shinjuku|2026-04-06T10:10:00|2026-04-06T10:12:00
+Akebonobashi|Shinjuku|Shinjuku-nishiguchi|Oedo|2026-04-06T10:22:00|2026-04-06T10:22:00
+Ryogoku|Oedo|Kiyosumi-shirakawa|Hanzomon|2026-04-06T10:55:00|2026-04-06T10:55:00
+Oshiage <SKYTREE>|Hanzomon|Honjo-azumabashi|Asakusa|2026-04-06T11:21:00|2026-04-06T11:23:00
+Shimbashi|Asakusa|Yurakucho|Yurakucho|2026-04-06T11:45:00|2026-04-06T11:47:00
+Yurakucho|Yurakucho|Kasumigaseki|Hibiya|2026-04-06T11:49:00|2026-04-06T11:51:00
+Naka-meguro|Hibiya|Meguro|Namboku|2026-04-06T12:11:00|2026-04-06T12:12:00
+Meguro|Namboku|Shirokanedai|Mita|2026-04-06T12:19:12|2026-04-06T12:21:12
+Uchisaiwaicho|Mita|Sengakuji|Asakusa|2026-04-06T12:41:48|2026-04-06T12:42:48
+Nishi-magome|Asakusa|Shin-kiba|Yurakucho|2026-04-06T13:29:00|2026-04-06T13:33:00
+Higashi-ikebukuro|Yurakucho|Shin-otsuka|Marunouchi|2026-04-06T14:23:00|2026-04-06T14:23:00
+Tokyo|Marunouchi|Kanda|Ginza|2026-04-06T14:52:00|2026-04-06T14:54:00
+Tawaramachi|Ginza|Todaimae|Namboku|2026-04-06T15:08:00|2026-04-06T15:10:00
+Akabane-iwabuchi|Namboku|Sugamo|Mita|2026-04-06T15:49:00|2026-04-06T15:51:00
+Jimbocho|Mita|Kudanshita|Hanzomon|2026-04-06T17:08:00|2026-04-06T17:10:00
+Hanzomon|Hanzomon|Roppongi-itchome|Namboku|2026-04-06T17:20:00|2026-04-06T17:20:00
+Roppongi-itchome|Namboku|Kokki-gijidomae|Marunouchi|2026-04-06T17:32:00|2026-04-06T17:33:00
+Ogikubo|Marunouchi|Nakano|Tozai|2026-04-06T18:19:00|2026-04-06T18:21:00
+Takebashi|Tozai|Ogawamachi|Shinjuku|2026-04-06T18:52:00|2026-04-06T18:55:00
+Ogawamachi|Shinjuku|Mitsukoshimae|Ginza|2026-04-06T19:09:00|2026-04-06T19:09:00
+Ometo-sando|Ginza|Hibiya|Chiyoda|2026-04-06T19:48:42|2026-04-06T19:50:42
