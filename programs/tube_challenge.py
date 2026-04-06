@@ -276,6 +276,19 @@ def add_custom_connections(graph, disable_bus=False):
     if not disable_bus:
         graph.add_edge("Y02", "E38", real_distance=2.4, weight=22.0, color="Bus")
 
+    graph.add_edge("Y02", "E38", real_distance=2.4, weight=12.0, color="Bike")
+    graph.add_edge("Y24", "E20", real_distance=1.8, weight=10.0, color="Bike")  # to Tatsumi
+
+    # Tokyu Toyoko: Shibuya to Jiyugaoka (bridges south gap)
+    graph.add_edge("Z01", "N03", real_distance=5.0, weight=9.0, color="tokyu-toyoko")
+
+    # Tokyu Den-en-toshi: Z01 → Futako-tamagawa
+    graph.add_edge("Z01", "N04", real_distance=7.0, weight=12.0, color="tokyu-denentoshi")
+
+    # Toei Shinjuku western end: Shinjuku (M08/S06) to Hatagaya or Sasazuka area
+    graph.add_edge("M08", "S06", real_distance=0.3, weight=2.0, color="Transfer")
+
+
     # Yamanote Junctions (needs double checking)
 
     # Yamanote Line between Ikebukuro and Takadanobaba - one transfer plus 2 stops
