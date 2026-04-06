@@ -784,6 +784,8 @@ def main(args):
     # Image dimensions
     ymin, ymax = 200, 1550
 
+    best_endless_candidate = None
+
     ys = [coords[1] for coords in positions_data.values()]
     min_y = min(ys)
     max_y = max(ys)
@@ -902,97 +904,113 @@ def main(args):
     else:
         base_trial_date = date.today()
 
-    for t in range(trials):
-        cutoff_dt = datetime.combine(base_trial_date, time(4, 0))
-
-        # deterministic trial RNG — use replay seed if provided for exact reproduction
-        if replay_seed is not None:
-            trial_seed = int(replay_seed)
-        else:
-            trial_seed = rng_master.randint(0, 2**31 - 1)
-        
-        trial_rng = random.Random(trial_seed)
-        perturb_rng = random.Random(trial_rng.randint(0, 2**31 - 1))
-        routing_rng = random.Random(trial_rng.randint(0, 2**31 - 1))
-        del trial_rng  # prevent accidental reuse
-
-        # perturb graph weights for search only
-        pert_graph = perturb_graph_weights(graph, noise, perturb_rng) if noise > 0 else graph
-
-        # compute candidate route from perturbed graph
-        candidate_route = simulate_grand_tour(
-            pert_graph,
-            secondary,
-            start_node=forced_start_node,
-            rng=routing_rng if not forced_start_node else None,
-        )
-
-        # determine start_dt for this candidate
-        if parsed_start_dt and parsed_start_dt >= cutoff_dt:
-            candidate_start_dt = parsed_start_dt
-        else:
-            start_node = candidate_route[0]
-            start_line_name = LETTER_TO_LINE.get(start_node[0], "")
-            tt_file = _find_timetable_file_for_line(start_line_name, timetables)
-            if tt_file:
-                trips = timetables.get(tt_file, [])
-                from_name = secondary.get(start_node, None)
-                from_norm = _norm(from_name)
-                dep_dt, tripid = find_first_departure_from_station(trips, from_norm, cutoff_dt)
-                candidate_start_dt = dep_dt if dep_dt else cutoff_dt
-            else:
-                candidate_start_dt = cutoff_dt
-
-        # refine with two-opt (validated against timed objective)
-        if not no_two_opt:
-            try:
-                refined_route, refined_timed = two_opt(candidate_route, graph, secondary, timetables, candidate_start_dt, max_iters=two_opt_iters, rng=routing_rng)
-            except Exception:
-                refined_route = candidate_route
-                refined_timed = compute_timed_route(candidate_route, graph, secondary, timetables, candidate_start_dt)
-
-        total_min = total_minutes_from_timed(refined_timed)
-
-        # Per-trial one-line summary when running in endless mode
-        if endless_mode:
-            trial_start_node = candidate_route[0] if candidate_route else None
-            trial_start_name = secondary.get(trial_start_node, trial_start_node) if trial_start_node else 'N/A'
-            if total_min is None:
-                time_str = 'N/A'
-            else:
-                th = total_min // 60
-                tm = total_min % 60
-                time_str = f"{th}h {tm}m"
+    try:
+        for t in range(trials):
             
-            if args.json:
-                print(json.dumps({
-                    "station": trial_start_name,
-                    "node": trial_start_node,
-                    "total_minutes": total_min,
-                    "time_str": time_str,
-                    "seed": trial_seed,
-                }, ensure_ascii=False), flush=True)
+            cutoff_dt = datetime.combine(base_trial_date, time(4, 0))
+
+            # deterministic trial RNG — use replay seed if provided for exact reproduction
+            if replay_seed is not None:
+                trial_seed = int(replay_seed)
             else:
-                print(f"{trial_start_name} ({trial_start_node}) — {time_str} — seed={trial_seed}")
+                trial_seed = rng_master.randint(0, 2**31 - 1)
+            
+            trial_rng = random.Random(trial_seed)
+            perturb_rng = random.Random(trial_rng.randint(0, 2**31 - 1))
+            routing_rng = random.Random(trial_rng.randint(0, 2**31 - 1))
+            del trial_rng  # prevent accidental reuse
 
-        if total_min is None:
-            continue
+            # perturb graph weights for search only
+            pert_graph = perturb_graph_weights(graph, noise, perturb_rng) if noise > 0 else graph
 
-        candidate = {
-            "total_min": total_min,
-            "route": refined_route,
-            "timed": refined_timed,
-            "start_dt": candidate_start_dt,
-            "trial_seed": trial_seed,
-            "noise": noise,
-        }
-        candidates.append(candidate)
+            # compute candidate route from perturbed graph
+            candidate_route = simulate_grand_tour(
+                pert_graph,
+                secondary,
+                start_node=forced_start_node,
+                rng=routing_rng if not forced_start_node else None,
+            )
 
-        # If in endless mode and threshold reached, stop early and use this candidate
-        if endless_mode and total_min <= endless_threshold_minutes:
-            success_candidate = candidate
-            print(f"Endless mode: found candidate <= threshold ({time_str}) at trial seed {trial_seed}")
-            break
+            # determine start_dt for this candidate
+            if parsed_start_dt and parsed_start_dt >= cutoff_dt:
+                candidate_start_dt = parsed_start_dt
+            else:
+                start_node = candidate_route[0]
+                start_line_name = LETTER_TO_LINE.get(start_node[0], "")
+                tt_file = _find_timetable_file_for_line(start_line_name, timetables)
+                if tt_file:
+                    trips = timetables.get(tt_file, [])
+                    from_name = secondary.get(start_node, None)
+                    from_norm = _norm(from_name)
+                    dep_dt, tripid = find_first_departure_from_station(trips, from_norm, cutoff_dt)
+                    candidate_start_dt = dep_dt if dep_dt else cutoff_dt
+                else:
+                    candidate_start_dt = cutoff_dt
+
+            # refine with two-opt (validated against timed objective)
+            if not no_two_opt:
+                try:
+                    refined_route, refined_timed = two_opt(candidate_route, graph, secondary, timetables, candidate_start_dt, max_iters=two_opt_iters, rng=routing_rng)
+                except Exception:
+                    refined_route = candidate_route
+                    refined_timed = compute_timed_route(candidate_route, graph, secondary, timetables, candidate_start_dt)
+
+            total_min = total_minutes_from_timed(refined_timed)
+
+            # Per-trial one-line summary when running in endless mode
+            if endless_mode:
+                trial_start_node = candidate_route[0] if candidate_route else None
+                trial_start_name = secondary.get(trial_start_node, trial_start_node) if trial_start_node else 'N/A'
+                if total_min is None:
+                    time_str = 'N/A'
+                else:
+                    th = total_min // 60
+                    tm = total_min % 60
+                    time_str = f"{th}h {tm}m"
+                
+                if args.json:
+                    print(json.dumps({
+                        "station": trial_start_name,
+                        "node": trial_start_node,
+                        "total_minutes": total_min,
+                        "time_str": time_str,
+                        "seed": trial_seed,
+                        "date": base_trial_date.isoformat(),
+                    }, ensure_ascii=False), flush=True)
+                else:
+                    print(f"{trial_start_name} ({trial_start_node}) — {time_str} — seed={trial_seed} — date={base_trial_date.isoformat()}")
+
+            if total_min is None:
+                continue
+
+            candidate = {
+                "total_min": total_min,
+                "route": refined_route,
+                "timed": refined_timed,
+                "start_dt": candidate_start_dt,
+                "trial_seed": trial_seed,
+                "noise": noise,
+            }
+            candidates.append(candidate)
+            if best_endless_candidate is None or total_min < best_endless_candidate["total_min"]:
+                best_endless_candidate = candidate
+
+            # If in endless mode and threshold reached, stop early and use this candidate
+            if endless_mode and total_min <= endless_threshold_minutes:
+                success_candidate = candidate
+                print(f"Endless mode: found candidate <= threshold ({time_str}) at trial seed {trial_seed}")
+                break
+    except KeyboardInterrupt:
+        print("Interrupted by user; processing candidates found so far...")
+
+    if endless_mode and best_endless_candidate is not None:
+        best_min = best_endless_candidate["total_min"]
+        best_seed = best_endless_candidate["trial_seed"]
+        best_start = best_endless_candidate["start_dt"]
+        bh = best_min // 60
+        bm = best_min % 60
+        print(f"\nBest endless result: {bh}h {bm}m — seed={best_seed} — date={base_trial_date.isoformat()}")
+        print(f"To reproduce: python programs/tube_challenge.py --replay-trial-seed {best_seed} --date {base_trial_date.isoformat()}")
 
     if not candidates:
         print("No viable timed candidate found.")
