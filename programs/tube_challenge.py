@@ -872,7 +872,7 @@ def main(args):
             for _ in range(num_swaps):
                 a = trial_rng.randint(1, len(candidate_route) - 2)
                 b = trial_rng.randint(1, len(candidate_route) - 2)
-                if a != b:
+                if a != b and candidate_route[a] is not None and candidate_route[b] is not None:
                     candidate_route[a], candidate_route[b] = candidate_route[b], candidate_route[a]
 
         # refine with two-opt (validated against timed objective)
@@ -1103,62 +1103,9 @@ def main(args):
             ride_min = 'N/A'
             # compute ride time from the boarding point for this arrival (start of continuous same-line run)
             if arr_v:
-                board_idx = None
-                # determine boarding index robustly using contiguous same-line run
-                if i >= 0:
-                    j = i
-                    target_line = None
-                    start_k = None
-                    while j >= 0:
-                        if edge_lines[j] in LINE_COLORS:
-                            if target_line is None:
-                                target_line = edge_lines[j]
-                                start_k = j
-                            elif edge_lines[j] == target_line:
-                                start_k = j
-                            else:
-                                break
-                        j -= 1
-                    if start_k is not None:
-                        cand_start = start_k
-                        cand_end = i
-                    else:
-                        cand_start = max(0, i)
-                        cand_end = i
-
-                    chosen = None
-                    current_trip = None
-                    if i < len(trip_ids):
-                        current_trip = trip_ids[i]
-                    if current_trip:
-                        for j in range(cand_start, cand_end + 1):
-                            if j < len(trip_ids) and trip_ids[j] == current_trip:
-                                chosen = j
-                                break
-                    if chosen is None:
-                        for j in range(cand_start, cand_end + 1):
-                            if j < len(depart_times) and depart_times[j] is not None:
-                                chosen = j
-                                break
-                    if chosen is None:
-                        for j in range(cand_start, cand_end + 1):
-                            if j < len(arrival_times) and arrival_times[j] is not None:
-                                chosen = j
-                                break
-                    board_idx = chosen if chosen is not None else max(0, i)
-
-                board_depart = None
-                if board_idx is not None and board_idx >= 0:
-                    if board_idx < len(depart_times):
-                        board_depart = depart_times[board_idx]
-                    if not board_depart and board_idx < len(arrival_times):
-                        board_depart = arrival_times[board_idx]
-
-                if not board_depart and i - 1 >= 0:
-                    if i - 1 < len(depart_times):
-                        board_depart = depart_times[i - 1]
-                    if not board_depart and i - 1 < len(arrival_times):
-                        board_depart = arrival_times[i - 1]
+                board_depart = find_board_index(
+                    i, edge_lines, trip_ids, depart_times, arrival_times
+                )
 
                 # debug output for known problem stations (verbose leg)
                 curr_name_v = secondary.get(u, 'Unknown Station')
