@@ -239,15 +239,20 @@ def visualize_route(graph, route, positions):
     plt.close(fig)
 
 
-def simulate_grand_tour(graph, secondary, start_node=None, rng=None):
+def simulate_grand_tour(graph, secondary, unique_nodes=None, start_node=None, rng=None):
     """
     Simulate a grand tour of the Tokyo Metro starting from a given station.
+    Accepts an optional precomputed `unique_nodes` list so callers can cache
+    and reuse it across multiple trials (avoids recomputing the TSP node set).
     :param graph: The metro graph.
+    :param secondary: Mapping node -> station name
+    :param unique_nodes: Optional precomputed list of nodes to pass to the TSP solver
     :param start_node: Optional node code to anchor the route start.
     :param rng: Optional random.Random instance for reproducible random starts.
     :return: A list of stations in the tour.
     """
-    unique_nodes = get_unique_station_nodes(graph, secondary)
+    if unique_nodes is None:
+        unique_nodes = get_unique_station_nodes(graph, secondary)
     route = traveling_salesman_problem(
         graph, cycle=False, weight="weight", nodes=unique_nodes
     )
@@ -745,6 +750,22 @@ def two_opt(route, graph, secondary, timetables, start_dt, max_iters=200, rng=No
 
 def load_graph(verbose=False, disable_bus=False):
     graph = nx.read_graphml("datasets/tokyometro.graphml")
+
+    # If the GraphML produced a directed graph, convert to undirected so
+    # that custom connections added later are effectively bidirectional.
+    if graph.is_directed():
+        if verbose:
+            print("Input graph is directed; converting to undirected for symmetric edges.")
+        try:
+            graph = graph.to_undirected()
+        except Exception:
+            # Fallback: create a new undirected Graph and copy nodes/edges
+            G = nx.Graph()
+            G.add_nodes_from(graph.nodes(data=True))
+            for u, v, data in graph.edges(data=True):
+                G.add_edge(u, v, **(data if isinstance(data, dict) else {}))
+            graph = G
+
     if verbose:
         print(
             "Loaded graph with",
@@ -819,6 +840,8 @@ def main(args):
 
     # load timetables
     timetables = load_timetables()
+    # Precompute the unique station nodes once and reuse across trials (TSP node set)
+    unique_nodes = get_unique_station_nodes(graph, secondary)
 
     # Optional forced start station (node code or station name)
     forced_start_node = None
@@ -940,6 +963,7 @@ def main(args):
             candidate_route = simulate_grand_tour(
                 pert_graph,
                 secondary,
+                unique_nodes=unique_nodes,
                 start_node=forced_start_node,
                 rng=routing_rng if not forced_start_node else None,
             )
@@ -963,12 +987,23 @@ def main(args):
             # refine with two-opt (validated against timed objective)
             if not no_two_opt:
                 try:
-                    refined_route, refined_timed = two_opt(candidate_route, graph, secondary, timetables, candidate_start_dt, max_iters=two_opt_iters, rng=routing_rng)
+                    refined_route, refined_timed = two_opt(
+                        candidate_route, graph, secondary, timetables,
+                        candidate_start_dt, max_iters=two_opt_iters, rng=routing_rng
+                    )
                 except Exception:
                     refined_route = candidate_route
-                    refined_timed = compute_timed_route(candidate_route, graph, secondary, timetables, candidate_start_dt)
+                    refined_timed = compute_timed_route(
+                        candidate_route, graph, secondary, timetables, candidate_start_dt
+                    )
+            else:
+                # --no-two-opt: skip refinement, time the raw candidate route directly
+                refined_route = candidate_route
+                refined_timed = compute_timed_route(
+                    candidate_route, graph, secondary, timetables, candidate_start_dt
+                )
 
-            total_min = total_minutes_from_timed(refined_timed)
+            total_min = total_minutes_from_timed(refined_timed)  # ✅ always defined
 
             # Per-trial one-line summary when running in endless mode
             if endless_mode:
@@ -1174,17 +1209,11 @@ def main(args):
     else:
         print(f"End at {end_name} ({end_line})")
 
-    # total overall time
-    start_of_trip = None
-    if depart_times and depart_times[0]:
-        start_of_trip = depart_times[0]
-    else:
-        start_of_trip = arrival_times[0]
-    if start_of_trip and final_arrival:
-        total_delta = final_arrival - start_of_trip
-        total_minutes = int(total_delta.total_seconds() / 60)
-        hours = total_minutes // 60
-        minutes = total_minutes % 60
+    # "total overall time" block:
+    total_min_display = total_minutes_from_timed(timed)
+    if total_min_display is not None:
+        hours = total_min_display // 60
+        minutes = total_min_display % 60
         print(f"Total tour time: {hours}h {minutes}m")
 
     # diagnostic waits
