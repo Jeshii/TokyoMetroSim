@@ -50,7 +50,7 @@ LINE_COLORS = {
 }
 
 
-def find_board_index(leg_idx, edge_lines, trip_ids, depart_times, arrival_times):
+def get_board_departure_time(leg_idx, edge_lines, trip_ids, depart_times, arrival_times):
     """Find the index of the boarding departure for the continuous same-line run
     ending at leg_idx. Returns the index into depart_times to use as board_depart.
     
@@ -974,7 +974,7 @@ def main(args):
             # compute ride time from the last boarding (start of continuous same-line run)
             ride_str = ""
             if arrive_time and curr_exp_idx - 1 >= 0:
-                board_depart = find_board_index(
+                board_depart = get_board_departure_time(
                     curr_exp_idx - 1, edge_lines, trip_ids, depart_times, arrival_times
                 )
 
@@ -1102,7 +1102,7 @@ def main(args):
             ride_min = 'N/A'
             # compute ride time from the boarding point for this arrival (start of continuous same-line run)
             if arr_v:
-                board_depart = find_board_index(
+                board_depart = get_board_departure_time(
                     i, edge_lines, trip_ids, depart_times, arrival_times
                 )
 
