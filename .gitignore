@@ -2,3 +2,4 @@
 app/route.png
 */__pycache__/*
 datasets/timetables/mini-tokyo-3d/
+datasets/last_route.json

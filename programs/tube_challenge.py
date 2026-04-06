@@ -1113,8 +1113,8 @@ def main(args):
                 if board_depart:
                     debug_stations = {"Sugamo", "Komagome", "Akabane-iwabuchi"}
                     if curr_name_v in debug_stations or next_name_v in debug_stations:
-                        print(f"DEBUG-VERB leg={i} u={u}->{v} curr={curr_name_v} next={next_name_v} board_idx={board_idx} board_depart={fmt(board_depart)} arr_v={fmt(arr_v)} dep={fmt(dep)}")
-                        bi = board_idx if board_idx is not None else -1
+                        print(f"DEBUG-VERB leg={i} u={u}->{v} curr={curr_name_v} next={next_name_v} board_depart={fmt(board_depart)} arr_v={fmt(arr_v)} dep={fmt(dep)}")
+                        bi = 0  # board_idx no longer available; slices are informational only
                         start_slice = max(0, bi - 3)
                         end_slice = min(len(edge_lines), bi + 3)
                         print("  edge_lines nearby:", edge_lines[start_slice:end_slice])
