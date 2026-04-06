@@ -1132,7 +1132,7 @@ def main(args):
     first_dep = None
     if unique_indices and unique_indices[0] < len(depart_times):
         first_dep = depart_times[unique_indices[0]]
-    print(f"\nStart at {start_name} ({start_line}) — planned {start_dt.strftime('%Y-%m-%d %H:%M')}")
+    print(f"\nStart at {start_name} [{station_route[0]}] ({start_line}) — planned {start_dt.strftime('%Y-%m-%d %H:%M')}")
     if first_dep:
         print(f"  First departure at {first_dep.strftime('%H:%M')}")
 
@@ -1206,24 +1206,24 @@ def main(args):
 
             # build two variants of the action message
             if stations == 0:
-                action_msg_long = f"Go back to {line_label} Line at {next_name} after visiting {curr_name} ({curr_line})"
-                action_msg_short = f"Go back to {line_label} Line at {next_name}"
+                action_msg_long = f"Go back to {line_label} Line at {next_name} [{next_station}] ({next_line}) after visiting {curr_name} [{curr_station}] ({curr_line})"
+                action_msg_short = f"Go back to {line_label} Line at {next_name} [{next_station}] ({next_line})"
             elif is_uturn:
-                action_msg_long = f"U-turn at {curr_name} ({curr_line}) after {stations} station{ 's' if stations > 1 else ''}"
+                action_msg_long = f"U-turn at {curr_name} [{curr_station}] ({curr_line}) after {stations} station{ 's' if stations > 1 else ''}"
                 action_msg_short = f"U-turn after {stations} station{ 's' if stations > 1 else ''}"
             else:
                 if curr_name == next_name:
-                    action_msg_long = f"Transfer to {line_label} Line at {curr_name} after {stations} station{ 's' if stations > 1 else ''}"
+                    action_msg_long = f"Transfer to {line_label} Line at {curr_name} [{curr_station}] ({curr_line}) after {stations} station{ 's' if stations > 1 else ''}"
                     action_msg_short = f"Transfer to {line_label} Line after {stations} station{ 's' if stations > 1 else ''}"
                 elif is_side_transfer:
-                    action_msg_long = f"Transfer at {curr_name} ({curr_line}) to {line_label} Line to get to {next_name} ({next_line})"
-                    action_msg_short = f"Transfer to {line_label} Line to get to {next_name} ({next_line})"
+                    action_msg_long = f"Transfer at {curr_name} [{curr_station}] ({curr_line}) to {line_label} Line to get to {next_name} [{next_station}] ({next_line})"
+                    action_msg_short = f"Transfer to {line_label} Line to get to {next_name} [{next_station}] ({next_line})"
                 else:
-                    action_msg_long = f"Transfer at {curr_name} ({curr_line}) to {line_label} Line at {next_name} after passing through {stations} station{ 's' if stations > 1 else ''}"
-                    action_msg_short = f"Transfer to {line_label} Line at {next_name} after passing through {stations} station{ 's' if stations > 1 else ''}"
+                    action_msg_long = f"Transfer at {curr_name} [{curr_station}] ({curr_line}) to {line_label} Line at {next_name} [{next_station}] after passing through {stations} station{ 's' if stations > 1 else ''}"
+                    action_msg_short = f"Transfer to {line_label} Line at {next_name} [{next_station}] after passing through {stations} station{ 's' if stations > 1 else ''}"
 
             if arrive_time:
-                prefix = f"Arrive at {curr_name} ({curr_line}) at {arrive_time.strftime('%H:%M')}{ride_str}"
+                prefix = f"Arrive at {curr_name} [{curr_station}] ({curr_line}) at {arrive_time.strftime('%H:%M')}{ride_str}"
                 msg = f"{prefix}, {action_msg_short}"
             else:
                 msg = action_msg_long
@@ -1239,9 +1239,9 @@ def main(args):
     end_line = LETTER_TO_LINE.get(station_route[-1][0], "Unknown Line")
     final_arrival = arrival_times[unique_indices[-1]] if unique_indices and unique_indices[-1] < len(arrival_times) else None
     if final_arrival:
-        print(f"End at {end_name} ({end_line}) — arrive {final_arrival.strftime('%Y-%m-%d %H:%M')}")
+        print(f"End at {end_name} [{station_route[-1]}] ({end_line}) — arrive {final_arrival.strftime('%Y-%m-%d %H:%M')}")
     else:
-        print(f"End at {end_name} ({end_line})")
+        print(f"End at {end_name} [{station_route[-1]}] ({end_line})")
 
     # "total overall time" block:
     total_min_display = total_minutes_from_timed(timed)
