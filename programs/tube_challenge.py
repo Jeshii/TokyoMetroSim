@@ -835,8 +835,6 @@ def main(args):
     noise = float(getattr(args, "noise", 0.05))
     seed = getattr(args, "seed", None)
 
-    cutoff_dt = datetime.combine(date.today(), time(4, 0))
-
     # parse explicit start arg (but do NOT commit to start_dt yet, we may compute per-trial)
     start_arg = getattr(args, "start", None)
     parsed_start_dt = None
@@ -859,7 +857,6 @@ def main(args):
     replay_seed = getattr(args, "replay_trial_seed", None)
     # If user asked to replay a specific trial seed, force a single trial
     if replay_seed is not None and trials > 1:
-        print("Warning: --replay-trial-seed supplied; forcing --trials 1 for exact reproduction.")
         trials = 1
     top_k = int(getattr(args, "top_k", 3))
     two_opt_iters = int(getattr(args, "two_opt_iters", 200))
@@ -895,6 +892,8 @@ def main(args):
 
     candidates = []
     for t in range(trials):
+        cutoff_dt = datetime.combine(date.today(), time(4, 0))
+
         # deterministic trial RNG — use replay seed if provided for exact reproduction
         if replay_seed is not None:
             trial_seed = int(replay_seed)
@@ -1228,7 +1227,7 @@ def main(args):
         print(f"\nRepro Trial Seed: {repro_seed}")
         if seed is not None:
             print(f"Master Seed: {seed}")
-        print(f"To reproduce this run exactly: python programs/tube_challenge.py --replay-trial-seed {repro_seed} --trials 1")
+        print(f"To reproduce this run exactly: python programs/tube_challenge.py --replay-trial-seed {repro_seed}")
     print(f"\nWorld Record: {format_timedelta_hms(WORLD_RECORD_DELTA)}")
     
     # Save last route data for external inspection (JSON)
