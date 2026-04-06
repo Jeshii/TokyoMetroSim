@@ -57,6 +57,26 @@ WORLD_RECORD_DELTA = timedelta(hours=13, minutes=53, seconds=25)
 WORLD_RECORD_MINUTES = int(WORLD_RECORD_DELTA.total_seconds() / 60)
 
 
+def get_terminal_nodes(graph, secondary):
+    """Return node IDs that are at the end of a line (degree 1 in the metro graph,
+    excluding custom bridge edges like Bus/Bike/JR/Transfer)."""
+    terminal_nodes = []
+    for node in graph.nodes():
+        metro_neighbors = [
+            v for v in graph.neighbors(node)
+            if graph.get_edge_data(node, v, {}).get("color", "") in LETTER_TO_LINE.values()
+            or graph.get_edge_data(node, v, {}).get("color", "").startswith("jreast-")  # skip
+        ]
+        # Count only pure metro line edges (by letter prefix)
+        metro_edges = [
+            v for v in graph.neighbors(node)
+            if node[0] in LETTER_TO_LINE and v[0] in LETTER_TO_LINE
+            and node[0] == v[0]  # same line
+        ]
+        if len(metro_edges) <= 1:
+            terminal_nodes.append(node)
+    return terminal_nodes
+
 def format_timedelta_hms(td: timedelta) -> str:
     """Format a timedelta as 'Hh Mm Ss' (omit seconds if zero)."""
     total_seconds = int(td.total_seconds())
@@ -280,13 +300,13 @@ def add_custom_connections(graph, disable_bus=False):
 
     # Bus between Narimasu and Hikarigaoka - one transfer plus 9 stops
     if not disable_bus:
-        graph.add_edge("Y02", "E38", real_distance=2.4, weight=22.0, color="Bus")
+        graph.add_edge("Y02", "E38", real_distance=2.4, weight=15.0, color="Bus")
 
     graph.add_edge("Y02", "E38", real_distance=2.4, weight=12.0, color="Bike")
     graph.add_edge("Y24", "E20", real_distance=1.8, weight=10.0, color="Bike")  # to Tatsumi
 
-    # Toei Shinjuku western end: Shinjuku (M08/S06) to Hatagaya or Sasazuka area
     graph.add_edge("M08", "S06", real_distance=0.3, weight=2.0, color="Transfer")
+    graph.add_edge("A17", "S10", real_distance=0.5, weight=8.0, color="Transfer")
 
 
     # Yamanote Junctions (needs double checking)
@@ -923,6 +943,8 @@ def main(args):
     if endless_mode:
         trials = max_endless_trials
 
+
+
     candidates = []
 
     trial_date_arg = getattr(args, "trial_date", None)
@@ -935,12 +957,28 @@ def main(args):
     else:
         base_trial_date = date.today()
 
+    sweep_mode = getattr(args, "sweep_terminals", False)
+    if sweep_mode:
+        terminal_nodes = get_terminal_nodes(graph, secondary)
+        noise_repeats = int(getattr(args, "sweep_repeats", 3))
+        trial_starts = terminal_nodes * noise_repeats
+        trials = len(trial_starts)
+        print(f"Sweep mode: {len(terminal_nodes)} terminal nodes × {noise_repeats} repeats = {trials} trials")
+    else:
+        trial_starts = [None] * trials
+
     try:
         success_candidate = None
 
         for t in range(trials):
             
             cutoff_dt = datetime.combine(base_trial_date, time(4, 0))
+
+            if sweep_mode:
+                forced_start_node = trial_starts[t]
+                trial_start_name = secondary.get(forced_start_node, forced_start_node)
+                if not endless_mode:
+                    print(f"Trial {t+1}/{trials}: starting at {trial_start_name} ({forced_start_node})")
 
             # deterministic trial RNG — use replay seed if provided for exact reproduction
             if replay_seed is not None:
@@ -1439,6 +1477,19 @@ def parse_args():
         type=str,
         default=None,
         help="Date for timetable lookups in YYYY-MM-DD format (default: today)",
+    )
+    parser.add_argument(
+        "--sweep-terminals",
+        action="store_true",
+        dest="sweep_terminals",
+        help="Systematically try every line terminal node as start station",
+    )
+    parser.add_argument(
+        "--sweep-repeats",
+        type=int,
+        dest="sweep_repeats",
+        default=3,
+        help="Number of noise trials per terminal in sweep mode (default 3)",
     )
     return parser.parse_args()
 
