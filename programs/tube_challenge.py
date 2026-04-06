@@ -1006,7 +1006,6 @@ def main(args):
     if endless_mode and best_endless_candidate is not None:
         best_min = best_endless_candidate["total_min"]
         best_seed = best_endless_candidate["trial_seed"]
-        best_start = best_endless_candidate["start_dt"]
         bh = best_min // 60
         bm = best_min % 60
         print(f"\nBest endless result: {bh}h {bm}m — seed={best_seed} — date={base_trial_date.isoformat()}")
