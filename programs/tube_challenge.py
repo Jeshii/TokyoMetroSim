@@ -68,8 +68,7 @@ def find_board_index(leg_idx, edge_lines, trip_ids, depart_times, arrival_times)
         if line_j is None:
             break
         if line_j not in LINE_COLORS:
-            j -= 1
-            continue
+            break
         if target_line is None:
             target_line = line_j
             start_k = j
@@ -387,10 +386,10 @@ def _find_timetable_file_for_line(line_name: str, timetables: dict):
 
 
 def _parse_time_with_date(time_str: str, base_date: date):
-    """Parse HH:MM into a datetime on base_date. If parsing fails, return None."""
     try:
-        t = datetime.strptime(time_str, "%H:%M").time()
-        return datetime.combine(base_date, t)
+        h, m = map(int, time_str.split(":"))
+        dt = datetime.combine(base_date, time(0, 0)) + timedelta(hours=h, minutes=m)
+        return dt
     except Exception:
         return None
 
