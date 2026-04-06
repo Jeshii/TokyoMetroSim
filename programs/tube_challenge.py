@@ -48,6 +48,7 @@ LINE_COLORS = {
     "Seibu": "#40A5AF",
     "Transfer": "#00FFFF",
     "Unknown": "#cccccc",
+    "Bike": "#00FF00",
 }
 
 # World record stored as a timedelta (single source of truth)
