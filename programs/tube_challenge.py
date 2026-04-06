@@ -1009,7 +1009,6 @@ def main(args):
         bh = best_min // 60
         bm = best_min % 60
         print(f"\nBest endless result: {bh}h {bm}m — seed={best_seed} — date={base_trial_date.isoformat()}")
-        print(f"To reproduce: python programs/tube_challenge.py --replay-trial-seed {best_seed} --date {base_trial_date.isoformat()}")
 
     if not candidates:
         print("No viable timed candidate found.")
