@@ -941,6 +941,8 @@ def main(args):
         base_trial_date = date.today()
 
     try:
+        success_candidate = None
+
         for t in range(trials):
             
             cutoff_dt = datetime.combine(base_trial_date, time(4, 0))
@@ -987,17 +989,11 @@ def main(args):
             # refine with two-opt (validated against timed objective)
             if not no_two_opt:
                 try:
-                    refined_route, refined_timed = two_opt(
-                        candidate_route, graph, secondary, timetables,
-                        candidate_start_dt, max_iters=two_opt_iters, rng=routing_rng
-                    )
+                    refined_route, refined_timed = two_opt(...)
                 except Exception:
                     refined_route = candidate_route
-                    refined_timed = compute_timed_route(
-                        candidate_route, graph, secondary, timetables, candidate_start_dt
-                    )
+                    refined_timed = compute_timed_route(...)
             else:
-                # --no-two-opt: skip refinement, time the raw candidate route directly
                 refined_route = candidate_route
                 refined_timed = compute_timed_route(
                     candidate_route, graph, secondary, timetables, candidate_start_dt
@@ -1063,7 +1059,7 @@ def main(args):
         return
 
     # if an endless-mode success candidate was found, prefer it (print full tour)
-    if 'success_candidate' in locals() and success_candidate is not None:
+    if success_candidate is not None:
         best_candidate = success_candidate
     else:
         # sort and keep top-k best by timed total
