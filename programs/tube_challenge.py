@@ -463,6 +463,15 @@ def find_next_trip_for_segment(timetable_trips, from_norm, to_norm, earliest_dt)
         best = min(after, key=lambda x: x[1])
         return best
 
+    # No same-day departure — try next-day versions only if earliest is late night (≥23:00)
+    if earliest_dt.hour >= 23:
+        next_day = [(dep + timedelta(days=1), arr + timedelta(days=1), tid)
+                    for (dep, arr, tid) in candidates
+                    if dep + timedelta(days=1) >= earliest_dt]
+        if next_day:
+            best = min(next_day, key=lambda x: x[1])
+            return best
+
     return None, None, None
 
 
@@ -490,9 +499,11 @@ def find_first_departure_from_station(timetable_trips, from_norm, cutoff_dt):
     for dep_dt, tid in candidates:
         if dep_dt >= cutoff_dt:
             return dep_dt, tid
+    # No departure found after cutoff — return the earliest known departure
+    # (it's probably just before cutoff, e.g. a 03:45 train; caller will handle)
     if candidates:
         dep_dt, tid = candidates[0]
-        return dep_dt + timedelta(days=1), tid
+        return dep_dt, tid  # don't add a day
     return None, None
 
 
