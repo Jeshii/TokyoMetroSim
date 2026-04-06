@@ -989,10 +989,15 @@ def main(args):
             # refine with two-opt (validated against timed objective)
             if not no_two_opt:
                 try:
-                    refined_route, refined_timed = two_opt(...)
+                    refined_route, refined_timed = two_opt(
+                        candidate_route, graph, secondary, timetables,
+                        candidate_start_dt, max_iters=two_opt_iters, rng=routing_rng
+                    )
                 except Exception:
                     refined_route = candidate_route
-                    refined_timed = compute_timed_route(...)
+                    refined_timed = compute_timed_route(
+                        candidate_route, graph, secondary, timetables, candidate_start_dt
+                    )
             else:
                 refined_route = candidate_route
                 refined_timed = compute_timed_route(
