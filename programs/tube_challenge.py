@@ -50,6 +50,72 @@ LINE_COLORS = {
 }
 
 
+def find_board_index(leg_idx, edge_lines, trip_ids, depart_times, arrival_times):
+    """Find the index of the boarding departure for the continuous same-line run
+    ending at leg_idx. Returns the index into depart_times to use as board_depart.
+    
+    Fixes:
+    - Breaks the backwards walk on None edge_lines (not just line mismatches)
+    - Unified logic used by both the summary printer and verbose leg printer
+    """
+    # Walk backwards to find start of contiguous same-line run
+    j = leg_idx
+    target_line = None
+    start_k = None
+    while j >= 0:
+        line_j = edge_lines[j] if j < len(edge_lines) else None
+        # Stop on None (gap in data) or a different line
+        if line_j is None:
+            break
+        if line_j not in LINE_COLORS:
+            j -= 1
+            continue
+        if target_line is None:
+            target_line = line_j
+            start_k = j
+        elif line_j == target_line:
+            start_k = j
+        else:
+            break
+        j -= 1
+
+    if start_k is not None:
+        cand_start = start_k
+        cand_end = leg_idx
+    else:
+        cand_start = leg_idx
+        cand_end = leg_idx
+
+    # Prefer same trip_id, then earliest depart_time, then earliest arrival_time
+    current_trip = trip_ids[leg_idx] if leg_idx < len(trip_ids) else None
+    chosen = None
+    if current_trip:
+        for j in range(cand_start, cand_end + 1):
+            if j < len(trip_ids) and trip_ids[j] == current_trip:
+                chosen = j
+                break
+    if chosen is None:
+        for j in range(cand_start, cand_end + 1):
+            if j < len(depart_times) and depart_times[j] is not None:
+                chosen = j
+                break
+    if chosen is None:
+        for j in range(cand_start, cand_end + 1):
+            if j < len(arrival_times) and arrival_times[j] is not None:
+                chosen = j
+                break
+
+    board_idx = chosen if chosen is not None else leg_idx
+
+    # Resolve to an actual datetime
+    board_depart = None
+    if board_idx < len(depart_times):
+        board_depart = depart_times[board_idx]
+    if not board_depart and board_idx < len(arrival_times):
+        board_depart = arrival_times[board_idx]
+
+    return board_depart
+
 def visualize_route(graph, route, positions):
     import matplotlib.pyplot as plt
 
@@ -157,20 +223,25 @@ def visualize_route(graph, route, positions):
     plt.close(fig)
 
 
-def simulate_grand_tour(graph, secondary, start_node=None):
+def simulate_grand_tour(graph, secondary, start_node=None, rng=None):
     """
     Simulate a grand tour of the Tokyo Metro starting from a given station.
     :param graph: The metro graph.
-    :param start_node: Optional node code to rotate the route to start from.
+    :param start_node: Optional node code to anchor the route start.
+    :param rng: Optional random.Random instance for reproducible random starts.
     :return: A list of stations in the tour.
     """
     unique_nodes = get_unique_station_nodes(graph, secondary)
     route = traveling_salesman_problem(
         graph, cycle=False, weight="weight", nodes=unique_nodes
     )
-    # if a forced start node was provided, rotate the route to start there
+    # If a forced start node was provided, rotate to it
     if start_node and start_node in route:
         idx = route.index(start_node)
+        route = route[idx:] + route[:idx]
+    elif rng is not None:
+        # No forced start — rotate to a random node in the route for diversity
+        idx = rng.randint(0, len(route) - 1)
         route = route[idx:] + route[:idx]
     return route
 
@@ -572,15 +643,10 @@ def total_minutes_from_timed(timed):
 
 
 def two_opt(route, graph, secondary, timetables, start_dt, max_iters=200, rng=None):
-    """Perform a two-opt local search guided by static shortest-path weights.
-
-    Proposals are tested using static shortest-path deltas; promising swaps
-    are validated by computing the timed total. Returns improved (route, timed).
-    """
+    """Perform a two-opt local search guided by static shortest-path weights."""
     if rng is None:
         rng = random.Random()
 
-    # distance cache for shortest path lengths
     dist_cache = {}
 
     def dist(u, v):
@@ -598,7 +664,6 @@ def two_opt(route, graph, secondary, timetables, start_dt, max_iters=200, rng=No
     if n < 4:
         return route, compute_timed_route(route, graph, secondary, timetables, start_dt)
 
-    # current timed and total
     current_timed = compute_timed_route(route, graph, secondary, timetables, start_dt)
     current_total = total_minutes_from_timed(current_timed) or float("inf")
 
@@ -607,28 +672,17 @@ def two_opt(route, graph, secondary, timetables, start_dt, max_iters=200, rng=No
     while improved and iters < max_iters:
         improved = False
         iters += 1
-        # sample a number of random pairs per iteration
         tries = max(10, n // 10)
         for _ in range(tries):
             i = rng.randint(0, n - 4)
             j = rng.randint(i + 1, n - 2)
-            A = route[i]
-            B = route[i + 1]
-            C = route[j]
-            D = route[j + 1]
-            wAB = dist(A, B)
-            wCD = dist(C, D)
-            wAC = dist(A, C)
-            wBD = dist(B, D)
+            A, B = route[i], route[i + 1]
+            C, D = route[j], route[j + 1]
+            wAB, wCD, wAC, wBD = dist(A, B), dist(C, D), dist(A, C), dist(B, D)
             if any(x == float("inf") for x in (wAB, wCD, wAC, wBD)):
                 continue
-
-            new_cost = wAC + wBD
-            old_cost = wAB + wCD
-            # propose only if static improvement
-            if new_cost + 1e-6 < old_cost:
-                # build candidate
-                candidate = route[: i + 1] + list(reversed(route[i + 1 : j + 1])) + route[j + 1 :]
+            if wAC + wBD + 1e-6 < wAB + wCD:
+                candidate = route[:i + 1] + list(reversed(route[i + 1:j + 1])) + route[j + 1:]
                 timed_candidate = compute_timed_route(candidate, graph, secondary, timetables, start_dt)
                 total_candidate = total_minutes_from_timed(timed_candidate)
                 if total_candidate is not None and total_candidate < current_total:
@@ -636,8 +690,7 @@ def two_opt(route, graph, secondary, timetables, start_dt, max_iters=200, rng=No
                     current_total = total_candidate
                     current_timed = timed_candidate
                     improved = True
-                    break
-        # end tries loop
+                    # FIX: don't break — continue trying more swaps this iteration
     return route, current_timed
 
 
@@ -789,7 +842,12 @@ def main(args):
         pert_graph = perturb_graph_weights(graph, noise, trial_rng) if noise > 0 else graph
 
         # compute candidate route from perturbed graph
-        candidate_route = simulate_grand_tour(pert_graph, secondary, start_node=forced_start_node)
+        candidate_route = simulate_grand_tour(
+            pert_graph,
+            secondary,
+            start_node=forced_start_node,
+            rng=trial_rng if not forced_start_node else None,
+        )
 
         # determine start_dt for this candidate
         if parsed_start_dt and parsed_start_dt >= cutoff_dt:
@@ -806,6 +864,16 @@ def main(args):
                 candidate_start_dt = dep_dt if dep_dt else cutoff_dt
             else:
                 candidate_start_dt = cutoff_dt
+
+        # Mutate candidate route for trial > 0 to escape identical TSP solutions
+        if t > 0 and len(candidate_route) > 4:
+            # Perform a small number of random station swaps (not 2-opt reversals)
+            num_swaps = max(2, len(candidate_route) // 20)
+            for _ in range(num_swaps):
+                a = trial_rng.randint(1, len(candidate_route) - 2)
+                b = trial_rng.randint(1, len(candidate_route) - 2)
+                if a != b:
+                    candidate_route[a], candidate_route[b] = candidate_route[b], candidate_route[a]
 
         # refine with two-opt (validated against timed objective)
         if not no_two_opt:
@@ -906,84 +974,28 @@ def main(args):
 
             # compute ride time from the last boarding (start of continuous same-line run)
             ride_str = ""
-            if arrive_time:
-                board_idx = None
-                # find the start of the continuous run: walk backwards from the previous leg (expanded indices)
-                if curr_exp_idx - 1 >= 0:
-                    j = curr_exp_idx - 1
-                    target_line = None
-                    start_k = None
-                    while j >= 0:
-                        if j < len(edge_lines) and edge_lines[j] in LINE_COLORS:
-                            if target_line is None:
-                                target_line = edge_lines[j]
-                                start_k = j
-                            elif edge_lines[j] == target_line:
-                                start_k = j
-                            else:
-                                break
-                        j -= 1
-                    if start_k is not None:
-                        cand_start = start_k
-                        cand_end = curr_exp_idx - 1
-                    else:
-                        cand_start = curr_exp_idx - 1
-                        cand_end = curr_exp_idx - 1
+            if arrive_time and curr_exp_idx - 1 >= 0:
+                board_depart = find_board_index(
+                    curr_exp_idx - 1, edge_lines, trip_ids, depart_times, arrival_times
+                )
 
-                    # prefer same trip_id, else earliest depart_time, else earliest arrival_time
-                    chosen = None
-                    current_trip = None
-                    if curr_exp_idx - 1 < len(trip_ids):
-                        current_trip = trip_ids[curr_exp_idx - 1]
-                    if current_trip:
-                        for j in range(cand_start, cand_end + 1):
-                            if j < len(trip_ids) and trip_ids[j] == current_trip:
-                                chosen = j
-                                break
-                    if chosen is None:
-                        for j in range(cand_start, cand_end + 1):
-                            if j < len(depart_times) and depart_times[j] is not None:
-                                chosen = j
-                                break
-                    if chosen is None:
-                        for j in range(cand_start, cand_end + 1):
-                            if j < len(arrival_times) and arrival_times[j] is not None:
-                                chosen = j
-                                break
-
-                    board_idx = chosen if chosen is not None else (curr_exp_idx - 1)
-
-                # boarding time preference
-                board_depart = None
-                if board_idx is not None and board_idx >= 0:
-                    if board_idx < len(depart_times):
-                        board_depart = depart_times[board_idx]
-                    if not board_depart and board_idx < len(arrival_times):
-                        board_depart = arrival_times[board_idx]
-
-                if not board_depart and curr_exp_idx - 1 >= 0:
-                    if curr_exp_idx - 1 < len(depart_times):
-                        board_depart = depart_times[curr_exp_idx - 1]
-                    if not board_depart and curr_exp_idx - 1 < len(arrival_times):
-                        board_depart = arrival_times[curr_exp_idx - 1]
+                if args.verbose and board_depart:
+                    def _fmt(dt):
+                        return dt.strftime('%H:%M') if dt else 'N/A'
+                    bi_log = curr_exp_idx - 1
+                    start_slice = max(0, bi_log - 3)
+                    end_slice = min(len(edge_lines), bi_log + 3)
+                    print(f"DEBUG-SUM s_idx={s_idx} curr={curr_name} next={next_name} "
+                          f"board_depart={_fmt(board_depart)} arrive_time={_fmt(arrive_time)} "
+                          f"depart_next={_fmt(depart_next)}")
+                    print("  edge_lines nearby:", edge_lines[start_slice:end_slice])
+                    print("  depart_times nearby:", [_fmt(t) for t in depart_times[start_slice:end_slice]])
+                    print("  arrival_times nearby:", [_fmt(t) for t in arrival_times[start_slice:end_slice+1]])
 
                 if board_depart:
-
-                    if args.verbose:
-                        def _fmt(dt):
-                            return dt.strftime('%H:%M') if dt else 'N/A'
-                        bi = board_idx if board_idx is not None else -1
-                        start_slice = max(0, bi - 3)
-                        end_slice = min(len(edge_lines), bi + 3)
-                        print(f"DEBUG-SUM s_idx={s_idx} curr={curr_name} next={next_name} board_idx={board_idx} board_depart={_fmt(board_depart)} arrive_time={_fmt(arrive_time)} depart_next={_fmt(depart_next)}")
-                        print("  edge_lines nearby:", edge_lines[start_slice:end_slice])
-                        print("  depart_times nearby:", [_fmt(t) for t in depart_times[start_slice:end_slice]])
-                        print("  arrival_times nearby:", [_fmt(t) for t in arrival_times[start_slice:end_slice+1]])
-
                     ride_delta = arrive_time - board_depart
-                    ride_delta2 = saved_depart - arrive_time if saved_depart else None
-                    if ride_delta2:
-                        ride_delta = max(ride_delta, ride_delta2)
+                    # BUG FIX: removed the `saved_depart` override — it produced
+                    # negative deltas because saved_depart < arrive_time
                     ride_minutes = int(ride_delta.total_seconds() / 60)
                     if ride_minutes < 0:
                         ride_minutes = 0
@@ -1226,8 +1238,8 @@ def parse_args():
         "--noise",
         type=float,
         dest="noise",
-        default=0.05,
-        help="Perturbation fraction for edge weights (e.g. 0.05 = +-5%%)",
+        default=0.15,
+        help="Perturbation fraction for edge weights (e.g. 0.15 = +-15%%)",
     )
     parser.add_argument(
         "--master-seed",
