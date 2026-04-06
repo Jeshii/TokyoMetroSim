@@ -891,25 +891,40 @@ def main(args):
         trials = max_endless_trials
 
     candidates = []
+
+    trial_date_arg = getattr(args, "trial_date", None)
+    if trial_date_arg:
+        try:
+            base_trial_date = date.fromisoformat(trial_date_arg)
+        except Exception:
+            print("Couldn't parse --date; using today.")
+            base_trial_date = date.today()
+    else:
+        base_trial_date = date.today()
+
     for t in range(trials):
-        cutoff_dt = datetime.combine(date.today(), time(4, 0))
+        cutoff_dt = datetime.combine(base_trial_date, time(4, 0))
 
         # deterministic trial RNG — use replay seed if provided for exact reproduction
         if replay_seed is not None:
             trial_seed = int(replay_seed)
         else:
             trial_seed = rng_master.randint(0, 2**31 - 1)
+        
         trial_rng = random.Random(trial_seed)
+        perturb_rng = random.Random(trial_rng.randint(0, 2**31 - 1))
+        routing_rng = random.Random(trial_rng.randint(0, 2**31 - 1))
+        del trial_rng  # prevent accidental reuse
 
         # perturb graph weights for search only
-        pert_graph = perturb_graph_weights(graph, noise, trial_rng) if noise > 0 else graph
+        pert_graph = perturb_graph_weights(graph, noise, perturb_rng) if noise > 0 else graph
 
         # compute candidate route from perturbed graph
         candidate_route = simulate_grand_tour(
             pert_graph,
             secondary,
             start_node=forced_start_node,
-            rng=trial_rng if not forced_start_node else None,
+            rng=routing_rng if not forced_start_node else None,
         )
 
         # determine start_dt for this candidate
@@ -931,13 +946,10 @@ def main(args):
         # refine with two-opt (validated against timed objective)
         if not no_two_opt:
             try:
-                refined_route, refined_timed = two_opt(candidate_route, graph, secondary, timetables, candidate_start_dt, max_iters=two_opt_iters, rng=trial_rng)
+                refined_route, refined_timed = two_opt(candidate_route, graph, secondary, timetables, candidate_start_dt, max_iters=two_opt_iters, rng=routing_rng)
             except Exception:
                 refined_route = candidate_route
                 refined_timed = compute_timed_route(candidate_route, graph, secondary, timetables, candidate_start_dt)
-        else:
-            refined_route = candidate_route
-            refined_timed = compute_timed_route(candidate_route, graph, secondary, timetables, candidate_start_dt)
 
         total_min = total_minutes_from_timed(refined_timed)
 
@@ -1217,7 +1229,7 @@ def main(args):
         print(f"\nRepro Trial Seed: {repro_seed}")
         if seed is not None:
             print(f"Master Seed: {seed}")
-        print(f"To reproduce this run exactly: python programs/tube_challenge.py --replay-trial-seed {repro_seed}")
+        print(f"To reproduce this run exactly: python programs/tube_challenge.py --replay-trial-seed {repro_seed} --date {base_trial_date.isoformat()}")
     print(f"\nWorld Record: {format_timedelta_hms(WORLD_RECORD_DELTA)}")
     
     # Save last route data for external inspection (JSON)
@@ -1366,6 +1378,13 @@ def parse_args():
         action="store_true",
         dest="json",
         help="Output results in JSON format (for endless mode)",
+    )
+    parser.add_argument(
+        "--date",
+        dest="trial_date",
+        type=str,
+        default=None,
+        help="Date for timetable lookups in YYYY-MM-DD format (default: today)",
     )
     return parser.parse_args()
 
