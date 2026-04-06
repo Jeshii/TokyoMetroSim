@@ -463,13 +463,6 @@ def find_next_trip_for_segment(timetable_trips, from_norm, to_norm, earliest_dt)
         best = min(after, key=lambda x: x[1])
         return best
 
-    # if none depart today after earliest_dt, consider the next day's candidates
-    if candidates:
-        # shift candidates by one day and pick earliest-arrival
-        shifted = [(dep + timedelta(days=1), arr + timedelta(days=1), tid) for (dep, arr, tid) in candidates]
-        best = min(shifted, key=lambda x: x[1])
-        return best
-
     return None, None, None
 
 
@@ -958,7 +951,17 @@ def main(args):
                 th = total_min // 60
                 tm = total_min % 60
                 time_str = f"{th}h {tm}m"
-            print(f"{trial_start_name} ({trial_start_node}) — {time_str} — seed={trial_seed}")
+            
+            if args.json:
+                print(json.dumps({
+                    "station": trial_start_name,
+                    "node": trial_start_node,
+                    "total_minutes": total_min,
+                    "time_str": time_str,
+                    "seed": trial_seed,
+                }, ensure_ascii=False), flush=True)
+            else:
+                print(f"{trial_start_name} ({trial_start_node}) — {time_str} — seed={trial_seed}")
 
         if total_min is None:
             continue
@@ -1357,6 +1360,12 @@ def parse_args():
         type=int,
         default=100000,
         help="Safety cap for endless mode (default 100000)",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="json",
+        help="Output results in JSON format (for endless mode)",
     )
     return parser.parse_args()
 
