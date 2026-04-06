@@ -428,13 +428,9 @@ def _parse_time_with_date(time_str: str, base_date: date):
 
 
 def find_next_trip_for_segment(timetable_trips, from_norm, to_norm, earliest_dt):
-    """Find next trip in timetable_trips that goes from from_norm to to_norm
-    with departure >= earliest_dt. Returns (depart_dt, arrive_dt, trip_id) or (None, None, None).
-    """
     if not timetable_trips:
         return None, None, None
     base_date = earliest_dt.date()
-    # Collect candidate trips with their departure datetime
     candidates = []
     for trip in timetable_trips:
         sidx = trip.get("station_idx", {})
@@ -448,26 +444,30 @@ def find_next_trip_for_segment(timetable_trips, from_norm, to_norm, earliest_dt)
             arr_dt = _parse_time_with_date(arr_str, base_date)
             if not dep_dt or not arr_dt:
                 continue
-            # if arrival is earlier than departure, assume next day
             if arr_dt < dep_dt:
                 arr_dt += timedelta(days=1)
-            # normalize candidate
             candidates.append((dep_dt, arr_dt, trip.get("id")))
 
-    # sort by departure time
     candidates.sort(key=lambda x: x[0])
 
-    # among candidates departing at/after earliest_dt, pick one with earliest arrival
-    after = [(dep, arr, tid) for (dep, arr, tid) in candidates if dep >= earliest_dt]
+    # *** FIX: cap lookahead to 24 hours ***
+    max_wait = earliest_dt + timedelta(hours=24)
+    after = [
+        (dep, arr, tid) for (dep, arr, tid) in candidates
+        if dep >= earliest_dt and dep <= max_wait   # <-- add the cap
+    ]
     if after:
         best = min(after, key=lambda x: x[1])
         return best
 
-    # No same-day departure — try next-day versions only if earliest is late night (≥23:00)
+    # No same-day departure — try next-day (also capped)
     if earliest_dt.hour >= 23:
-        next_day = [(dep + timedelta(days=1), arr + timedelta(days=1), tid)
-                    for (dep, arr, tid) in candidates
-                    if dep + timedelta(days=1) >= earliest_dt]
+        next_day = [
+            (dep + timedelta(days=1), arr + timedelta(days=1), tid)
+            for (dep, arr, tid) in candidates
+            if (dep + timedelta(days=1)) >= earliest_dt
+               and (dep + timedelta(days=1)) <= max_wait  # <-- cap here too
+        ]
         if next_day:
             best = min(next_day, key=lambda x: x[1])
             return best
