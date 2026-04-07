@@ -1191,6 +1191,7 @@ def main(args):
                         "total_minutes": total_min,
                         "time_str": time_str,
                         "seed": trial_seed,
+                        "start_dt": candidate_start_dt.isoformat() if candidate_start_dt else None,
                         "date": base_trial_date.isoformat(),
                     }, ensure_ascii=False), flush=True)
                 else:
