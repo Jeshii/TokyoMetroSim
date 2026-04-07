@@ -663,7 +663,7 @@
     <node id="M07">
       <data key="d0">Marunouchi</data>
     </node>
-    <node id="Mb05">
+    <node id="B05">
       <data key="d0">Marunouchi</data>
     </node>
     <node id="M10">
@@ -690,10 +690,10 @@
     <node id="M24">
       <data key="d0">Marunouchi</data>
     </node>
-    <node id="Mb03">
+    <node id="B03">
       <data key="d0">Marunouchi</data>
     </node>
-    <node id="Mb04">
+    <node id="B04">
       <data key="d0">Marunouchi</data>
     </node>
     <node id="N02">
@@ -2594,12 +2594,12 @@
       <data key="d2">1.1</data>
       <data key="d3">Marunouchi</data>
     </edge>
-    <edge source="M06" target="Mb05">
+    <edge source="M06" target="B05">
       <data key="d1">1.3</data>
       <data key="d2">1.3</data>
       <data key="d3">Marunouchi</data>
     </edge>
-    <edge source="Mb05" target="Mb04">
+    <edge source="B05" target="B04">
       <data key="d1">0.6</data>
       <data key="d2">0.6</data>
       <data key="d3">Marunouchi</data>
@@ -2629,7 +2629,7 @@
       <data key="d2">1.2</data>
       <data key="d3">Marunouchi</data>
     </edge>
-    <edge source="Mb03" target="Mb04">
+    <edge source="B03" target="B04">
       <data key="d1">1.3</data>
       <data key="d2">1.3</data>
       <data key="d3">Marunouchi</data>

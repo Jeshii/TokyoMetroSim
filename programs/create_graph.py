@@ -21,6 +21,7 @@ color_maps = {
     "E": "Oedo",
     "G": "Ginza",
     "M": "Marunouchi",
+    "B": "Marunouchi Branch",
     "H": "Hibiya",
     "T": "Tozai",
     "C": "Chiyoda",

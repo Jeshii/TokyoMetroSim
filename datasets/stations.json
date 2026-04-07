@@ -32,7 +32,7 @@
             "name_en": "Marunouchi Line",
             "name_jp": "丸ノ内線"
         },
-        "Mb": {
+        "B": {
             "name_en": "Marunouchi Line Branch Line",
             "name_jp": "丸ノ内線分岐線"
         },
@@ -4208,7 +4208,7 @@
                 {
                     "distance": 1.3,
                     "duration": -1,
-                    "target_id": "Mb05",
+                    "target_id": "B05",
                     "type": "ride",
                     "type_id": 1
                 }
@@ -4778,12 +4778,12 @@
             "name_en": "Ikebukuro",
             "name_jp": "池袋"
         },
-        "Mb03": {
+        "B03": {
             "connections": [
                 {
                     "distance": 1.3,
                     "duration": -1,
-                    "target_id": "Mb04",
+                    "target_id": "B04",
                     "type": "ride",
                     "type_id": 1
                 }
@@ -4791,19 +4791,19 @@
             "name_en": "Honancho",
             "name_jp": "方南町"
         },
-        "Mb04": {
+        "B04": {
             "connections": [
                 {
                     "distance": 1.3,
                     "duration": -1,
-                    "target_id": "Mb03",
+                    "target_id": "B03",
                     "type": "ride",
                     "type_id": 1
                 },
                 {
                     "distance": 0.6,
                     "duration": -1,
-                    "target_id": "Mb05",
+                    "target_id": "B05",
                     "type": "ride",
                     "type_id": 1
                 }
@@ -4811,12 +4811,12 @@
             "name_en": "Nakano-fujimicho",
             "name_jp": "中野富士見町"
         },
-        "Mb05": {
+        "B05": {
             "connections": [
                 {
                     "distance": 0.6,
                     "duration": -1,
-                    "target_id": "Mb04",
+                    "target_id": "B04",
                     "type": "ride",
                     "type_id": 1
                 },

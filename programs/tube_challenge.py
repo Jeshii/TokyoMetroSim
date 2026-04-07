@@ -19,6 +19,7 @@ LETTER_TO_LINE = {
     "E": "Oedo",
     "G": "Ginza",
     "M": "Marunouchi",
+    "B": "Marunouchi Branch",
     "H": "Hibiya",
     "T": "Tozai",
     "C": "Chiyoda",
@@ -35,6 +36,7 @@ LINE_COLORS = {
     "Oedo": "#A02759",
     "Ginza": "#DA9C41",
     "Marunouchi": "#BB3032",
+    "Marunouchi Branch": "#BB3032",
     "Hibiya": "#BEB8AA",
     "Tozai": "#0BA3D8",
     "Chiyoda": "#0BA3D8",
@@ -385,11 +387,10 @@ def simulate_grand_tour(graph, secondary, unique_nodes=None, start_node=None, rn
     if start_node and start_node in route:
         idx = route.index(start_node)
         route = route[idx:] + route[:idx]
-        # Still allow randomizing direction when rng is provided: flip the tail
+        # Optionally randomize traversal direction; allow a full reversal
+        # (this lets trials explore the opposite traversal order)
         if rng is not None and rng.random() < 0.5:
-            if len(route) > 1:
-                # keep the forced start in place, reverse the remaining traversal
-                route = [route[0]] + list(reversed(route[1:]))
+            route = list(reversed(route))
     elif rng is not None:
         # No forced start — rotate to a random node in the route for diversity
         idx = rng.randint(0, len(route) - 1)
@@ -1232,7 +1233,12 @@ def main(args):
     if sweep_mode:
         terminal_nodes = get_terminal_nodes(graph, secondary)
         noise_repeats = int(getattr(args, "sweep_repeats", 3))
-        trial_starts = terminal_nodes * noise_repeats
+        # Interleave repeats so each terminal appears in a distinct position
+        # per repeat (avoids repeating the same seed ordering across repeats).
+        trial_starts = []
+        for repeat in range(noise_repeats):
+            for node in terminal_nodes:
+                trial_starts.append(node)
         trials = len(trial_starts)
         print(f"Sweep mode: {len(terminal_nodes)} terminal nodes × {noise_repeats} repeats = {trials} trials")
     else:
@@ -1266,10 +1272,19 @@ def main(args):
             pert_graph = perturb_graph_weights(graph, noise, perturb_rng) if noise > 0 else graph
 
             # compute candidate route from perturbed graph
+            # Shuffle the precomputed unique node list per-trial so the
+            # TSP heuristic explores different node orderings each run.
+            shuffled_nodes = unique_nodes[:]
+            try:
+                routing_rng.shuffle(shuffled_nodes)
+            except Exception:
+                # Fallback: use Python's random.shuffle if Random.shuffle isn't available
+                random.shuffle(shuffled_nodes)
+
             candidate_route = simulate_grand_tour(
                 pert_graph,
                 secondary,
-                unique_nodes=unique_nodes,
+                unique_nodes=shuffled_nodes,
                 start_node=forced_start_node,
                 rng=routing_rng,
             )

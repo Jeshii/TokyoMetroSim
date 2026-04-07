@@ -8,6 +8,7 @@ LETTER_TO_LINE = {
     "E": "toei-oedo",
     "G": "tokyometro-ginza",
     "M": "tokyometro-marunouchi",
+    "B": "tokyometro-marunouchibranch",
     "H": "tokyometro-hibiya",
     "T": "tokyometro-tozai",
     "C": "tokyometro-chiyoda",
@@ -178,10 +179,10 @@ ALL = {"A": {
     "I26": [230, 61, "Blue"],
     "I27": [170, 61, "Blue"],
 },
-"Mb" : {
-    "Mb03": [84, 820, "Red"],
-    "Mb04": [171, 820, "Red"],
-    "Mb05": [264, 821, "Red"],
+"B" : {
+    "B03": [84, 820, "Red"],
+    "B04": [171, 820, "Red"],
+    "B05": [264, 821, "Red"],
 },
 "M" : {
     "M01": [143, 591, "Red"],

@@ -21,6 +21,7 @@ letter_to_line = {
     "E": "Oedo",
     "G": "Ginza",
     "M": "Marunouchi",
+    "B": "Marunouchi Branch",
     "H": "Hibiya",
     "T": "Tozai",
     "C": "Chiyoda",
