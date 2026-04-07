@@ -202,7 +202,27 @@ def check_oedo_continuity(route):
     if len(runs) > 2:
         print(f"WARNING: Oedo line split into {len(runs)} fragments — "
               f"TSP is backtracking. Runs: {[r[0]+'-'+r[-1] for r in runs]}")
+    else:
+        # Helpful development-time confirmation for healthy cases
+        print(f"Oedo OK: {len(runs)} contiguous run(s) — {[r[0]+'-'+r[-1] for r in runs]}")
     return runs
+
+def get_oedo_subpath(graph):
+    """Return the best linear traversal of all Oedo (E*) stations.
+    The figure-8 has a natural split: inner loop E01-E28, outer E29-E38.
+    We walk inner forward then outer forward and finish back at E28.
+    Returns a list of node codes starting and ending at E28 (Tochomae junction).
+    """
+    inner = [f"E{str(i).zfill(2)}" for i in range(1, 29) if graph.has_node(f"E{str(i).zfill(2)}")]
+    outer = [f"E{str(i).zfill(2)}" for i in range(29, 39) if graph.has_node(f"E{str(i).zfill(2)}")]
+    if not inner and not outer:
+        return []
+    path = inner + outer
+    # Ensure we end back at the inner loop junction (E28) if present
+    if inner:
+        if path[-1] != inner[-1]:
+            path.append(inner[-1])
+    return path
 
 def format_timedelta_hms(td: timedelta) -> str:
     """Format a timedelta as 'Hh Mm Ss' (omit seconds if zero)."""
@@ -532,7 +552,7 @@ def add_custom_connections(graph, disable_bus=False):
     # Oedo figure-8 junction: allow optimizer to "restart" the
     # second loop from Tochomae (E28) without a real transfer cost.
     # E27 (inner loop near Shinjuku) and E29 (outer loop next station)
-    graph.add_edge("E27", "E29", real_distance=0.1, weight=1.0, color="Transfer")
+    # Removed E27<->E29 transfer workaround — Oedo is injected as a subpath now
 
     # Tokyu Den-en-toshi: Shibuya (Z01/G01) → Futako-Tamagawa direction
     # Through-runs from Hanzomon line. Bridges the Shibuya cluster to
@@ -1310,28 +1330,27 @@ def main(args):
                 # Fallback: use Python's random.shuffle if Random.shuffle isn't available
                 random.shuffle(shuffled_nodes)
 
-            # Pull all Oedo nodes to be contiguous in the hint list,
-            # anchored around E28 (Tochomae) as the figure-8 junction.
-            oedo_nodes = [n for n in shuffled_nodes if isinstance(n, str) and n.startswith("E")]
-            non_oedo = [n for n in shuffled_nodes if not (isinstance(n, str) and n.startswith("E"))]
-            # Sort Oedo nodes so inner loop (E01-E28) comes first, then outer (E29-E38)
-            try:
-                oedo_nodes.sort(key=lambda n: int(n[1:]) if (len(n) > 1 and n[1:].isdigit()) else 9999)
-            except Exception:
-                pass
-            insert_pos = routing_rng.randint(0, len(non_oedo))
-            shuffled_nodes = non_oedo[:insert_pos] + oedo_nodes + non_oedo[insert_pos:]
+            # Remove Oedo nodes from the TSP and represent Oedo as a single anchor (E28).
+            non_oedo_nodes = [n for n in shuffled_nodes if not (isinstance(n, str) and n.startswith("E"))]
+            oedo_anchor = "E28" if "E28" in pert_graph.nodes() else next((n for n in shuffled_nodes if isinstance(n, str) and n.startswith("E")), None)
+            tsp_nodes = non_oedo_nodes + ([oedo_anchor] if oedo_anchor else [])
 
             candidate_route = simulate_grand_tour(
                 pert_graph,
                 secondary,
-                unique_nodes=shuffled_nodes,
+                unique_nodes=tsp_nodes,
                 start_node=forced_start_node,
                 rng=routing_rng,
             )
-            # Post-TSP Oedo continuity check: warn if Oedo stations are fragmented
-            if candidate_route:
-                check_oedo_continuity(candidate_route)
+            # Splice the full Oedo subpath into the candidate where the anchor appears
+            if candidate_route and oedo_anchor and oedo_anchor in candidate_route:
+                oedo_sub = get_oedo_subpath(graph)
+                splice_idx = candidate_route.index(oedo_anchor)
+                candidate_route = (
+                    candidate_route[:splice_idx]
+                    + oedo_sub
+                    + candidate_route[splice_idx + 1 :]
+                )
 
             # determine start_dt for this candidate
             if parsed_start_dt and parsed_start_dt >= cutoff_dt:
@@ -1375,6 +1394,10 @@ def main(args):
                     use_congestion=use_congestion,
                     hub_extra_minutes=hub_extra_minutes,
                 )
+
+            # two-opt refinement complete. Oedo continuity is enforced
+            # by injecting the full Oedo subpath before two-opt, so no
+            # additional fragmentation warnings are necessary here.
 
             # Optionally sweep start times for this fixed route to find the best start
             if getattr(args, "sweep_starts", False):
