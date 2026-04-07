@@ -391,6 +391,9 @@ def simulate_grand_tour(graph, secondary, unique_nodes=None, start_node=None, rn
         # (this lets trials explore the opposite traversal order)
         if rng is not None and rng.random() < 0.5:
             route = list(reversed(route))
+            # re-anchor so forced_start_node is still first
+            idx = route.index(start_node)
+            route = route[idx:] + route[:idx]
     elif rng is not None:
         # No forced start — rotate to a random node in the route for diversity
         idx = rng.randint(0, len(route) - 1)
