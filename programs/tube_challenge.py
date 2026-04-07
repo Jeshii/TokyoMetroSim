@@ -56,6 +56,59 @@ WORLD_RECORD_DELTA = timedelta(hours=13, minutes=53, seconds=25)
 # Derived minutes for comparisons (used as default threshold)
 WORLD_RECORD_MINUTES = int(WORLD_RECORD_DELTA.total_seconds() / 60)
 
+# Congestion profile and hub definitions for transfer buffer adjustments
+CONGESTION_WINDOWS = [
+    (7, 10, 2.5),   # AM rush: multiplier for base buffer
+    (17, 20, 2.0),  # PM rush: multiplier for base buffer
+]
+
+# Stations (node codes) that are large interchange hubs and add extra minutes
+HUB_STATIONS = {
+    "M08",  # Shinjuku
+    "G01",  # Shibuya
+    "Y09",  # Ikebukuro (Yurakucho)
+    "F09",  # Ikebukuro (Fukutoshin)
+    "M25",  # Ikebukuro (Marunouchi)
+    "M17",  # Tokyo
+    "Z08",  # Oshiage area
+    "H22",  # Kita-senju
+    "C18",  # Kita-senju (Chiyoda)
+}
+
+# Default extra minutes added at hubs (can be overridden via CLI)
+HUB_EXTRA_MINUTES = 2
+
+
+def get_transfer_buffer(at_node, at_time, base_minutes=2, use_congestion=True, hub_extra_minutes=None):
+    """Return transfer wait buffer (minutes) for a station at a given time.
+
+    - `at_node`: node code (e.g. 'M08')
+    - `at_time`: datetime when the transfer occurs
+    - `base_minutes`: base transfer buffer in minutes
+    - `use_congestion`: if False, always return `base_minutes`
+    - `hub_extra_minutes`: extra minutes to add for hub stations (defaults to HUB_EXTRA_MINUTES)
+    """
+    if not use_congestion:
+        return float(base_minutes)
+
+    buf = float(base_minutes)
+    try:
+        h = at_time.hour
+    except Exception:
+        h = 0
+
+    for start_h, end_h, mult in CONGESTION_WINDOWS:
+        if start_h <= h < end_h:
+            buf = base_minutes * mult
+            break
+
+    if hub_extra_minutes is None:
+        hub_extra_minutes = HUB_EXTRA_MINUTES
+    if at_node in HUB_STATIONS:
+        buf += float(hub_extra_minutes)
+
+    return float(buf)
+
 
 def get_terminal_nodes(graph, secondary):
     """Return node IDs that are at the end of a line (degree 1 in the metro graph,
@@ -464,6 +517,11 @@ def find_next_trip_for_segment(timetable_trips, from_norm, to_norm, earliest_dt)
     if not timetable_trips:
         return None, None, None
     base_date = earliest_dt.date()
+    # Congestion/timing options from CLI
+    use_congestion = not getattr(args, "no_congestion", False)
+    transfer_buffer_minutes = float(getattr(args, "transfer_buffer", 2))
+    hub_extra_minutes = float(getattr(args, "hub_extra", HUB_EXTRA_MINUTES))
+
     candidates = []
     for trip in timetable_trips:
         sidx = trip.get("station_idx", {})
@@ -540,7 +598,8 @@ def find_first_departure_from_station(timetable_trips, from_norm, cutoff_dt):
     return None, None
 
 
-def compute_timed_route(route, graph, secondary, timetables, start_dt, transfer_buffer_minutes=2):
+def compute_timed_route(route, graph, secondary, timetables, start_dt,
+                        transfer_buffer_minutes=2, use_congestion=True, hub_extra_minutes=None):
     """Compute depart/arrival datetimes for each node along the route.
 
     Returns dict with keys:
@@ -606,12 +665,14 @@ def compute_timed_route(route, graph, secondary, timetables, start_dt, transfer_
         edge_lines[i] = line
 
         # earliest possible departure is arrival at u,
-        # plus transfer buffer if changing lines
+        # plus transfer buffer if changing lines (congestion-aware)
         earliest = arrival_times[i]
         if earliest is None:
             earliest = start_dt
         if prev_line and line != prev_line:
-            earliest = earliest + timedelta(minutes=transfer_buffer_minutes)
+            buf = get_transfer_buffer(u, earliest, base_minutes=transfer_buffer_minutes,
+                                      use_congestion=use_congestion, hub_extra_minutes=hub_extra_minutes)
+            earliest = earliest + timedelta(minutes=buf)
 
         depart_dt = None
         arrive_dt = None
@@ -711,8 +772,14 @@ def total_minutes_from_timed(timed):
     return int(delta.total_seconds() / 60)
 
 
-def two_opt(route, graph, secondary, timetables, start_dt, max_iters=200, rng=None):
-    """Perform a two-opt local search guided by static shortest-path weights."""
+def two_opt(route, graph, secondary, timetables, start_dt, max_iters=200, rng=None,
+            transfer_buffer_minutes=2, use_congestion=True, hub_extra_minutes=None):
+    """Perform a two-opt local search guided by static shortest-path weights.
+
+    For correctness with congestion-aware timing, `transfer_buffer_minutes`,
+    `use_congestion`, and `hub_extra_minutes` are forwarded to
+    `compute_timed_route()` when evaluating candidates.
+    """
     if rng is None:
         rng = random.Random()
 
@@ -731,9 +798,15 @@ def two_opt(route, graph, secondary, timetables, start_dt, max_iters=200, rng=No
 
     n = len(route)
     if n < 4:
-        return route, compute_timed_route(route, graph, secondary, timetables, start_dt)
+        return route, compute_timed_route(route, graph, secondary, timetables, start_dt,
+                                          transfer_buffer_minutes=transfer_buffer_minutes,
+                                          use_congestion=use_congestion,
+                                          hub_extra_minutes=hub_extra_minutes)
 
-    current_timed = compute_timed_route(route, graph, secondary, timetables, start_dt)
+    current_timed = compute_timed_route(route, graph, secondary, timetables, start_dt,
+                                        transfer_buffer_minutes=transfer_buffer_minutes,
+                                        use_congestion=use_congestion,
+                                        hub_extra_minutes=hub_extra_minutes)
     current_total = total_minutes_from_timed(current_timed) or float("inf")
 
     iters = 0
@@ -752,7 +825,10 @@ def two_opt(route, graph, secondary, timetables, start_dt, max_iters=200, rng=No
                 continue
             if wAC + wBD + 1e-6 < wAB + wCD:
                 candidate = route[:i + 1] + list(reversed(route[i + 1:j + 1])) + route[j + 1:]
-                timed_candidate = compute_timed_route(candidate, graph, secondary, timetables, start_dt)
+                timed_candidate = compute_timed_route(candidate, graph, secondary, timetables, start_dt,
+                                                      transfer_buffer_minutes=transfer_buffer_minutes,
+                                                      use_congestion=use_congestion,
+                                                      hub_extra_minutes=hub_extra_minutes)
                 total_candidate = total_minutes_from_timed(timed_candidate)
                 if total_candidate is not None and total_candidate < current_total:
                     route = candidate
@@ -1024,17 +1100,26 @@ def main(args):
                 try:
                     refined_route, refined_timed = two_opt(
                         candidate_route, graph, secondary, timetables,
-                        candidate_start_dt, max_iters=two_opt_iters, rng=routing_rng
+                        candidate_start_dt, max_iters=two_opt_iters, rng=routing_rng,
+                        transfer_buffer_minutes=transfer_buffer_minutes,
+                        use_congestion=use_congestion,
+                        hub_extra_minutes=hub_extra_minutes,
                     )
                 except Exception:
                     refined_route = candidate_route
                     refined_timed = compute_timed_route(
-                        candidate_route, graph, secondary, timetables, candidate_start_dt
+                        candidate_route, graph, secondary, timetables, candidate_start_dt,
+                        transfer_buffer_minutes=transfer_buffer_minutes,
+                        use_congestion=use_congestion,
+                        hub_extra_minutes=hub_extra_minutes,
                     )
             else:
                 refined_route = candidate_route
                 refined_timed = compute_timed_route(
-                    candidate_route, graph, secondary, timetables, candidate_start_dt
+                    candidate_route, graph, secondary, timetables, candidate_start_dt,
+                    transfer_buffer_minutes=transfer_buffer_minutes,
+                    use_congestion=use_congestion,
+                    hub_extra_minutes=hub_extra_minutes,
                 )
 
             total_min = total_minutes_from_timed(refined_timed)  # ✅ always defined
@@ -1490,6 +1575,26 @@ def parse_args():
         dest="sweep_repeats",
         default=3,
         help="Number of noise trials per terminal in sweep mode (default 3)",
+    )
+    parser.add_argument(
+        "--no-congestion",
+        action="store_true",
+        dest="no_congestion",
+        help="Disable congestion-aware buffers (use flat base buffer)",
+    )
+    parser.add_argument(
+        "--transfer-buffer",
+        dest="transfer_buffer",
+        type=float,
+        default=2,
+        help="Base transfer buffer in minutes (default 2)",
+    )
+    parser.add_argument(
+        "--hub-extra",
+        dest="hub_extra",
+        type=float,
+        default=HUB_EXTRA_MINUTES,
+        help="Extra minutes added at hub stations (default 2)",
     )
     return parser.parse_args()
 
