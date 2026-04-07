@@ -172,7 +172,11 @@ def get_terminal_nodes(graph, secondary):
             v for v in graph.neighbors(node)
             if isinstance(v, str) and len(v) > 0 and v[0] in LETTER_TO_LINE and v[0] == node[0]
         ]
-        if len(same_line_neighbors) <= 1:
+        # Exclude isolated nodes (no same-line neighbors at all — likely ghost nodes)
+        if len(same_line_neighbors) == 0:
+            continue
+        # If the node has exactly one neighbor on the same named line, it's a terminal
+        if len(same_line_neighbors) == 1:
             terminal_nodes.append(node)
     return terminal_nodes
 
@@ -716,6 +720,11 @@ def find_next_trip_for_segment(timetable_trips, from_norm, to_norm, earliest_dt)
     candidates.sort(key=lambda x: x[0])
 
     # *** FIX: cap lookahead to 24 hours ***
+    # Note: the next-day fallback below is only attempted when the caller's
+    # `earliest_dt.hour >= 23` (legacy behavior). This means callers that run
+    # shortly after midnight may not automatically get a next-day candidate;
+    # callers that rely on early-morning cross-midnight searches should take
+    # this into account or perform an explicit next-day lookup.
     max_wait = earliest_dt + timedelta(hours=24)
     after = [
         (dep, arr, tid) for (dep, arr, tid) in candidates
@@ -1009,7 +1018,10 @@ def two_opt(route, graph, secondary, timetables, start_dt, max_iters=200, rng=No
                     current_total = total_candidate
                     current_timed = timed_candidate
                     improved = True
-                    # FIX: don't break — continue trying more swaps this iteration
+                    # Note: we set `improved = True` but intentionally do not break here.
+                    # Continuing to try more swaps within this iteration may find
+                    # additional improvements; when the inner loop completes,
+                    # the outer `while improved` loop will restart another pass.
     return route, current_timed
 
 
@@ -1213,6 +1225,10 @@ def main(args):
         base_trial_date = date.today()
 
     sweep_mode = getattr(args, "sweep_terminals", False)
+    # Guard: sweep-terminals and endless mode are incompatible — prefer sweep
+    if sweep_mode and endless_mode:
+        print("Warning: --sweep-terminals is incompatible with --endless; ignoring --endless.")
+        endless_mode = False
     if sweep_mode:
         terminal_nodes = get_terminal_nodes(graph, secondary)
         noise_repeats = int(getattr(args, "sweep_repeats", 3))
