@@ -109,6 +109,32 @@ def get_transfer_buffer(at_node, at_time, base_minutes=2, use_congestion=True, h
 
     return float(buf)
 
+# Preferred refill stations (konbini-capable) and vending-only backups.
+# Keys are station display names; matching is done with `_norm()` against `secondary` values.
+RAW_REFILL_STATIONS = {
+    "Sakuradamon": 60,       # 60s
+    "Inaricho": 120,         # 120s
+    "HonKomagome": 120,      # 120s
+    "UenoHirokoji": 120,     # 120s
+    "ShinOtsuka": 120,       # 120s
+    "BarakiNakayama": 180,   # 180s (terminus / well stocked)
+    "MinamiAsagaya": 120,    # 120s
+    "Sendagi": 120,          # 120s
+    # additional useful stops (may or may not match secondary names exactly)
+    "Nishigahara": 60,
+    "Iidabashi": 90,
+    "Ochanomizu": 90,
+    "Meguro": 90,
+}
+
+# Ultra-quiet vending-only stops (fast 30s grab)
+RAW_VENDING_STATIONS = {
+    "Nishigahara": 30,
+    "Shimo": 30,
+    "Tatsumi": 30,
+    "Nijubashimae": 30,
+}
+
 
 def sweep_start_times(route, graph, secondary, timetables, from_dt, to_dt, step_minutes=15,
                       transfer_buffer_minutes=2, use_congestion=True, hub_extra_minutes=None):
@@ -138,18 +164,15 @@ def get_terminal_nodes(graph, secondary):
     excluding custom bridge edges like Bus/Bike/JR/Transfer)."""
     terminal_nodes = []
     for node in graph.nodes():
-        metro_neighbors = [
+        # Only consider nodes that are on a named metro line
+        if not node or node[0] not in LETTER_TO_LINE:
+            continue
+        # Count neighbors on the same metro line (by letter prefix)
+        same_line_neighbors = [
             v for v in graph.neighbors(node)
-            if graph.get_edge_data(node, v, {}).get("color", "") in LETTER_TO_LINE.values()
-            or graph.get_edge_data(node, v, {}).get("color", "").startswith("jreast-")  # skip
+            if isinstance(v, str) and len(v) > 0 and v[0] in LETTER_TO_LINE and v[0] == node[0]
         ]
-        # Count only pure metro line edges (by letter prefix)
-        metro_edges = [
-            v for v in graph.neighbors(node)
-            if node[0] in LETTER_TO_LINE and v[0] in LETTER_TO_LINE
-            and node[0] == v[0]  # same line
-        ]
-        if len(metro_edges) <= 1:
+        if len(same_line_neighbors) <= 1:
             terminal_nodes.append(node)
     return terminal_nodes
 
@@ -353,14 +376,24 @@ def simulate_grand_tour(graph, secondary, unique_nodes=None, start_node=None, rn
     route = traveling_salesman_problem(
         graph, cycle=False, weight="weight", nodes=unique_nodes
     )
+
     # If a forced start node was provided, rotate to it
     if start_node and start_node in route:
         idx = route.index(start_node)
         route = route[idx:] + route[:idx]
+        # Still allow randomizing direction when rng is provided: flip the tail
+        if rng is not None and rng.random() < 0.5:
+            if len(route) > 1:
+                # keep the forced start in place, reverse the remaining traversal
+                route = [route[0]] + list(reversed(route[1:]))
     elif rng is not None:
         # No forced start — rotate to a random node in the route for diversity
         idx = rng.randint(0, len(route) - 1)
         route = route[idx:] + route[:idx]
+        # Randomly flip traversal direction 50% of the time
+        if rng.random() < 0.5:
+            route = list(reversed(route))
+
     return route
 
 
@@ -452,6 +485,50 @@ def add_custom_connections(graph, disable_bus=False):
 
     graph.add_edge("H01", "Z01", real_distance=0.5, weight=3.0, color="tokyu-toyoko")
 
+    # Tobu Tojo through-service: Wakoshi (F01/Y01) north toward Kawagoe
+    # In practice the Fukutoshin/Yurakucho lines run directly through —
+    # no "transfer" needed at Wakoshi. Both node pairs share the same station.
+    graph.add_edge("F01", "Y01", real_distance=0.1, weight=1.0, color="Transfer")
+
+    # Odakyu from Yoyogi-uehara (C01) — southwest exit off Chiyoda line.
+    # Reaches Shinjuku in ~10 min (5 stops). Avoids Shinjuku backtrack
+    # for routes entering/exiting the Chiyoda west terminal.
+    graph.add_edge("C01", "M08", real_distance=8.0, weight=11.0, color="odakyu-odawara")
+
+    # Keio New Line from Shinjuku (M08/E27) to Hatsudai area —
+    # useful bridge to avoid Oedo dead-end at Tochomae (E28).
+    # Approximate 2 stops on Keio Shin-sen.
+    graph.add_edge("E28", "M08", real_distance=1.5, weight=4.0, color="keio-newline")
+
+    # Tokyu Den-en-toshi: Shibuya (Z01/G01) → Futako-Tamagawa direction
+    # Through-runs from Hanzomon line. Bridges the Shibuya cluster to
+    # Tokyu's network. Weight reflects ~15 min to Futako-Tamagawa.
+    # (No metro node at destination, so bridge back to G01 as a loop anchor)
+    graph.add_edge("Z01", "G01", real_distance=0.1, weight=1.0, color="Transfer")
+
+    # Tokyo Monorail: Hamamatsucho (A09/Daimon area) → Shin-Kiba cluster.
+    # Daimon (E20/A09) is the closest metro node. Bridges the southeast
+    # bay area without needing the Keiyo loop.
+    # ~25 min to Haneda and back is NOT useful; the value is Tennozu Isle
+    # direction connecting to Rinkai (twr-rinkai already covers Shin-Kiba).
+    # Skip monorail — Rinkai edge Y24↔A03 already covers this gap.
+
+    # Nishi-Nippori (C16) → Akabane-Iwabuchi (N19) via JR Keihin-Tohoku.
+    # Fills the gap between Chiyoda north terminus and Namboku north terminus.
+    # ~4 stops, approx 8 min.
+    graph.add_edge("C16", "N19", real_distance=5.0, weight=9.0, color="jreast-keihintohoku")
+
+    # Akabane-Iwabuchi (N19) is the Namboku north terminus — already a
+    # terminal node. Bridge to Mita line terminal Nishi-takashimadaira (I27)
+    # via walk/bus (they are ~3 km apart but a bus runs).
+    graph.add_edge("N19", "I27", real_distance=3.2, weight=14.0, color="Bus")
+
+    # Seibu Ikebukuro: Ikebukuro (F09) → Nerima (E35).
+    # The Seibu Ikebukuro line departs from the same building.
+    # Already covered via Y06/F06 → E35 (Seibu Yurakucho), but a direct
+    # F09 → E35 edge gives the optimizer a shorter hop option.
+    graph.add_edge("F09", "E35", real_distance=3.5, weight=7.0, color="seibu-ikebukuro")
+
     return graph
 
 
@@ -466,6 +543,84 @@ def _norm(name: str) -> str:
     # keep only alphanumeric characters
     name = re.sub(r"[^0-9A-Za-z]", "", name)
     return name.lower()
+
+
+def apply_refill_stops(route_nodes, secondary, stop_interval_stations=25, include_vending=True, max_lookahead=10):
+    """Identify convenient refill stops along a station-level route.
+
+    - `route_nodes`: list of node codes (station-level route is acceptable)
+    - `secondary`: node -> station display name mapping (loaded from datasets/secondary.json)
+    - `stop_interval_stations`: place a refill approximately every N stations
+    - `include_vending`: allow vending-only 30s stops as fallback
+    - `max_lookahead`: how many stations forward/back to search for a match
+
+    Returns (stops, total_seconds) where `stops` is a list of tuples
+    `(node, seconds, kind)` and `total_seconds` is the summed penalty.
+    """
+    # build normalized lookup from raw lists
+    refill_norm = { _norm(k): v for k, v in RAW_REFILL_STATIONS.items() }
+    vending_norm = { _norm(k): v for k, v in RAW_VENDING_STATIONS.items() }
+
+    # map node -> seconds by matching normalized station names
+    node_refill = {}
+    node_vending = {}
+    for node, name in secondary.items():
+        n = _norm(name)
+        if n in refill_norm:
+            node_refill[node] = refill_norm[n]
+        if n in vending_norm:
+            node_vending[node] = vending_norm[n]
+
+    # collapse to first-occurrence station-level sequence (mirrors station_route)
+    station_seq = []
+    seen = set()
+    for n in route_nodes:
+        sname = secondary.get(n, n)
+        if sname not in seen:
+            seen.add(sname)
+            station_seq.append(n)
+
+    stops = []
+    used_nodes = set()
+    # every `stop_interval_stations`, attempt to pick a convenient refill
+    for idx in range(stop_interval_stations, len(station_seq), stop_interval_stations):
+        found_node = None
+        found_secs = None
+        found_kind = None
+        # look forward first
+        for j in range(idx, min(len(station_seq), idx + max_lookahead)):
+            cand = station_seq[j]
+            if cand in node_refill and cand not in used_nodes:
+                found_node = cand
+                found_secs = node_refill[cand]
+                found_kind = "Refill"
+                break
+            if include_vending and cand in node_vending and cand not in used_nodes:
+                found_node = cand
+                found_secs = node_vending[cand]
+                found_kind = "Vending"
+                break
+        # look backward if nothing found forward
+        if not found_node:
+            for j in range(idx - 1, max(-1, idx - max_lookahead - 1), -1):
+                cand = station_seq[j]
+                if cand in node_refill and cand not in used_nodes:
+                    found_node = cand
+                    found_secs = node_refill[cand]
+                    found_kind = "Refill"
+                    break
+                if include_vending and cand in node_vending and cand not in used_nodes:
+                    found_node = cand
+                    found_secs = node_vending[cand]
+                    found_kind = "Vending"
+                    break
+
+        if found_node:
+            stops.append((found_node, found_secs, found_kind))
+            used_nodes.add(found_node)
+
+    total_seconds = sum(s for (_n, s, _k) in stops)
+    return stops, total_seconds
 
 
 def load_timetables(timetables_dir="datasets/timetables"):
@@ -1100,7 +1255,7 @@ def main(args):
                 secondary,
                 unique_nodes=unique_nodes,
                 start_node=forced_start_node,
-                rng=routing_rng if not forced_start_node else None,
+                rng=routing_rng,
             )
 
             # determine start_dt for this candidate
@@ -1384,6 +1539,21 @@ def main(args):
         hours = total_min_display // 60
         minutes = total_min_display % 60
         print(f"Total tour time: {hours}h {minutes}m")
+
+    # Optional: insert planned refill stops (konbini / vending) and report their impact
+    if getattr(args, "refill_stops", False):
+        stops, refill_secs = apply_refill_stops(station_route, secondary, stop_interval_stations=int(getattr(args, "refill_interval", 25)))
+        if stops:
+            m = refill_secs // 60
+            s = int(refill_secs % 60)
+            print(f"\nRefill stops inserted: {len(stops)} stops adding {int(refill_secs)}s ({m}m {s}s)")
+            for node, secs, kind in stops:
+                name = secondary.get(node, node)
+                print(f" - {name} [{node}]: +{secs}s ({kind})")
+        total_seconds = (total_min_display * 60) + (refill_secs if 'refill_secs' in locals() else 0)
+        hours_r = total_seconds // 3600
+        minutes_r = (total_seconds % 3600) // 60
+        print(f"Total tour time with refills: {hours_r}h {minutes_r}m")
 
     # diagnostic waits
     if getattr(args, "debug_waits", False):
@@ -1672,6 +1842,19 @@ def parse_args():
         type=int,
         default=15,
         help="Step in minutes between probed starts (default 15)",
+    )
+    parser.add_argument(
+        "--refill-stops",
+        action="store_true",
+        dest="refill_stops",
+        help="Insert planned refill stops every N stations using preferred list",
+    )
+    parser.add_argument(
+        "--refill-interval",
+        dest="refill_interval",
+        type=int,
+        default=25,
+        help="Stations per refill stop (default 25)",
     )
     return parser.parse_args()
 
