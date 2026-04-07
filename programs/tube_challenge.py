@@ -1056,6 +1056,15 @@ def two_opt(route, graph, secondary, timetables, start_dt, max_iters=200, rng=No
             wAB, wCD, wAC, wBD = dist(A, B), dist(C, D), dist(A, C), dist(B, D)
             if any(x == float("inf") for x in (wAB, wCD, wAC, wBD)):
                 continue
+            # Guard: skip any swap that overlaps the Oedo (E*) block
+            oedo_indices = [k for k, n in enumerate(route) if isinstance(n, str) and n.startswith("E")]
+            if oedo_indices:
+                oedo_start = oedo_indices[0]
+                oedo_end = oedo_indices[-1]
+                # Skip if either swap endpoint falls inside or straddles the Oedo block
+                if not (j < oedo_start or i > oedo_end):
+                    continue
+
             if wAC + wBD + 1e-6 < wAB + wCD:
                 candidate = route[:i + 1] + list(reversed(route[i + 1:j + 1])) + route[j + 1:]
                 timed_candidate = compute_timed_route(candidate, graph, secondary, timetables, start_dt,
