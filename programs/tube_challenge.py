@@ -180,7 +180,29 @@ def get_terminal_nodes(graph, secondary):
         # If the node has exactly one neighbor on the same named line, it's a terminal
         if len(same_line_neighbors) == 1:
             terminal_nodes.append(node)
+    # Oedo is a figure-8: no true terminals exist by degree analysis.
+    # Manually inject the two endpoints and the junction as sweep anchors.
+    OEDO_PSEUDO_TERMINALS = ["E01", "E28", "E38"]
+    terminal_nodes.extend([n for n in OEDO_PSEUDO_TERMINALS if n in graph.nodes()])
     return terminal_nodes
+
+
+def check_oedo_continuity(route):
+    """Warn if Oedo stations appear in more than 2 contiguous runs."""
+    runs = []
+    in_run = False
+    for node in route:
+        if isinstance(node, str) and node.startswith("E"):
+            if not in_run:
+                runs.append([])
+                in_run = True
+            runs[-1].append(node)
+        else:
+            in_run = False
+    if len(runs) > 2:
+        print(f"WARNING: Oedo line split into {len(runs)} fragments — "
+              f"TSP is backtracking. Runs: {[r[0]+'-'+r[-1] for r in runs]}")
+    return runs
 
 def format_timedelta_hms(td: timedelta) -> str:
     """Format a timedelta as 'Hh Mm Ss' (omit seconds if zero)."""
@@ -507,6 +529,10 @@ def add_custom_connections(graph, disable_bus=False):
     # useful bridge to avoid Oedo dead-end at Tochomae (E28).
     # Approximate 2 stops on Keio Shin-sen.
     graph.add_edge("E28", "M08", real_distance=1.5, weight=4.0, color="keio-newline")
+    # Oedo figure-8 junction: allow optimizer to "restart" the
+    # second loop from Tochomae (E28) without a real transfer cost.
+    # E27 (inner loop near Shinjuku) and E29 (outer loop next station)
+    graph.add_edge("E27", "E29", real_distance=0.1, weight=1.0, color="Transfer")
 
     # Tokyu Den-en-toshi: Shibuya (Z01/G01) → Futako-Tamagawa direction
     # Through-runs from Hanzomon line. Bridges the Shibuya cluster to
@@ -1284,6 +1310,18 @@ def main(args):
                 # Fallback: use Python's random.shuffle if Random.shuffle isn't available
                 random.shuffle(shuffled_nodes)
 
+            # Pull all Oedo nodes to be contiguous in the hint list,
+            # anchored around E28 (Tochomae) as the figure-8 junction.
+            oedo_nodes = [n for n in shuffled_nodes if isinstance(n, str) and n.startswith("E")]
+            non_oedo = [n for n in shuffled_nodes if not (isinstance(n, str) and n.startswith("E"))]
+            # Sort Oedo nodes so inner loop (E01-E28) comes first, then outer (E29-E38)
+            try:
+                oedo_nodes.sort(key=lambda n: int(n[1:]) if (len(n) > 1 and n[1:].isdigit()) else 9999)
+            except Exception:
+                pass
+            insert_pos = routing_rng.randint(0, len(non_oedo))
+            shuffled_nodes = non_oedo[:insert_pos] + oedo_nodes + non_oedo[insert_pos:]
+
             candidate_route = simulate_grand_tour(
                 pert_graph,
                 secondary,
@@ -1291,6 +1329,9 @@ def main(args):
                 start_node=forced_start_node,
                 rng=routing_rng,
             )
+            # Post-TSP Oedo continuity check: warn if Oedo stations are fragmented
+            if candidate_route:
+                check_oedo_continuity(candidate_route)
 
             # determine start_dt for this candidate
             if parsed_start_dt and parsed_start_dt >= cutoff_dt:
