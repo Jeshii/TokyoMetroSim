@@ -110,6 +110,29 @@ def get_transfer_buffer(at_node, at_time, base_minutes=2, use_congestion=True, h
     return float(buf)
 
 
+def sweep_start_times(route, graph, secondary, timetables, from_dt, to_dt, step_minutes=15,
+                      transfer_buffer_minutes=2, use_congestion=True, hub_extra_minutes=None):
+    """Retime a fixed route over a grid of start datetimes and return the best timed result.
+
+    Returns tuple (best_total_minutes, best_start_dt, best_timed) or (None, None, None)
+    """
+    results = []
+    t = from_dt
+    while t <= to_dt:
+        timed = compute_timed_route(route, graph, secondary, timetables, t,
+                                    transfer_buffer_minutes=transfer_buffer_minutes,
+                                    use_congestion=use_congestion,
+                                    hub_extra_minutes=hub_extra_minutes)
+        total = total_minutes_from_timed(timed)
+        if total is not None:
+            results.append((total, t, timed))
+        t = t + timedelta(minutes=step_minutes)
+    if not results:
+        return None, None, None
+    results.sort(key=lambda x: x[0])
+    return results[0]
+
+
 def get_terminal_nodes(graph, secondary):
     """Return node IDs that are at the end of a line (degree 1 in the metro graph,
     excluding custom bridge edges like Bus/Bike/JR/Transfer)."""
@@ -517,10 +540,6 @@ def find_next_trip_for_segment(timetable_trips, from_norm, to_norm, earliest_dt)
     if not timetable_trips:
         return None, None, None
     base_date = earliest_dt.date()
-    # Congestion/timing options from CLI
-    use_congestion = not getattr(args, "no_congestion", False)
-    transfer_buffer_minutes = float(getattr(args, "transfer_buffer", 2))
-    hub_extra_minutes = float(getattr(args, "hub_extra", HUB_EXTRA_MINUTES))
 
     candidates = []
     for trip in timetable_trips:
@@ -1021,6 +1040,11 @@ def main(args):
 
 
 
+    # Congestion/timing options from CLI
+    use_congestion = not getattr(args, "no_congestion", False)
+    transfer_buffer_minutes = float(getattr(args, "transfer_buffer", 2))
+    hub_extra_minutes = float(getattr(args, "hub_extra", HUB_EXTRA_MINUTES))
+
     candidates = []
 
     trial_date_arg = getattr(args, "trial_date", None)
@@ -1121,6 +1145,31 @@ def main(args):
                     use_congestion=use_congestion,
                     hub_extra_minutes=hub_extra_minutes,
                 )
+
+            # Optionally sweep start times for this fixed route to find the best start
+            if getattr(args, "sweep_starts", False):
+                sf = getattr(args, "sweep_start_from", "04:00")
+                st = getattr(args, "sweep_start_to", "10:00")
+                step = int(getattr(args, "sweep_start_step", 15))
+                from_dt = _parse_time_with_date(sf, base_trial_date)
+                to_dt = _parse_time_with_date(st, base_trial_date)
+                if from_dt is None:
+                    from_dt = cutoff_dt
+                if to_dt is None:
+                    to_dt = datetime.combine(base_trial_date, time(10, 0))
+                if from_dt < cutoff_dt:
+                    from_dt = cutoff_dt
+                if to_dt < from_dt:
+                    to_dt = from_dt
+                best_total, best_start_dt, best_timed = sweep_start_times(
+                    refined_route, graph, secondary, timetables, from_dt, to_dt, step,
+                    transfer_buffer_minutes=transfer_buffer_minutes,
+                    use_congestion=use_congestion,
+                    hub_extra_minutes=hub_extra_minutes,
+                )
+                if best_total is not None:
+                    refined_timed = best_timed
+                    candidate_start_dt = best_start_dt
 
             total_min = total_minutes_from_timed(refined_timed)  # ✅ always defined
 
@@ -1595,6 +1644,33 @@ def parse_args():
         type=float,
         default=HUB_EXTRA_MINUTES,
         help="Extra minutes added at hub stations (default 2)",
+    )
+    parser.add_argument(
+        "--sweep-starts",
+        action="store_true",
+        dest="sweep_starts",
+        help="Enable start time sweep mode (evaluate multiple start times)",
+    )
+    parser.add_argument(
+        "--sweep-start-from",
+        dest="sweep_start_from",
+        type=str,
+        default="04:00",
+        help="Earliest start to probe (HH:MM, default 04:00)",
+    )
+    parser.add_argument(
+        "--sweep-start-to",
+        dest="sweep_start_to",
+        type=str,
+        default="10:00",
+        help="Latest start to probe (HH:MM, default 10:00)",
+    )
+    parser.add_argument(
+        "--sweep-start-step",
+        dest="sweep_start_step",
+        type=int,
+        default=15,
+        help="Step in minutes between probed starts (default 15)",
     )
     return parser.parse_args()
 
